@@ -1,7 +1,6 @@
 #include "ewellix_tlt/serial_com_tlt.h"
 
 
-
 SerialComTlt::SerialComTlt(){
     run_ = true;
     debug_ = false;
@@ -39,7 +38,7 @@ bool SerialComTlt::startSerialCom(string port, int baud_rate){
     serial_tlt_.setPort(port);
     serial_tlt_.setBaudrate(baud_rate);
     serial_tlt_.setTimeout(timeout);
-  
+
     try{
         serial_tlt_.open();
         cout << "SerialComTlt::startSerialCom - COM OPEN !" << endl;
@@ -58,7 +57,7 @@ bool SerialComTlt::startSerialCom(string port, int baud_rate){
 bool SerialComTlt::startRs232Com(){
 
     vector<unsigned char> params = {0x01};
-    sendCmd("RO",&params); 
+    sendCmd("RO",&params);
     bool result = sendCmd("RO",&params); // double call to wake up the column after long delay without com
     if(result){
         com_started_=true;
@@ -69,7 +68,7 @@ bool SerialComTlt::startRs232Com(){
     else{
         return false;
     }
-    
+
 }
 
 /*
@@ -78,7 +77,7 @@ bool SerialComTlt::startRs232Com(){
 bool SerialComTlt::stopRs232Com(){
     com_started_=false;
     usleep(100);
-    vector<unsigned char> params = {}; 
+    vector<unsigned char> params = {};
     bool result = sendCmd("RA",&params);
 
     if(result){
@@ -92,70 +91,89 @@ bool SerialComTlt::stopRs232Com(){
 /*
 * Move both with input pose (ntick)
 */
-void SerialComTlt::moveMotAll(int pose){
-    vector<unsigned char> pose_hex = intToBytes(pose);
-    unsigned char a = *(pose_hex.end()-4);
-    unsigned char b = *(pose_hex.end()-3);
-    unsigned char c = *(pose_hex.end()-2);
-    unsigned char d = *(pose_hex.end()-1); 
+void SerialComTlt::moveMotAll(int mot1_pose, int mot2_pose){
+    vector<unsigned char> params;
+    vector<unsigned char> pose_hex;
+    unsigned char a;
+    unsigned char b;
+    unsigned char c;
+    unsigned char d;
 
-    vector<unsigned char> params = {0x06, 0x00,0x20,0x30,d,c,b,a};
-    
-    // MOT 1
+
+    // Motor1
+    pose_hex = intToBytes(mot1_pose);
+    a = *(pose_hex.end()-4);
+    b = *(pose_hex.end()-3);
+    c = *(pose_hex.end()-2);
+    d = *(pose_hex.end()-1);
+
+    params = {0x06,0x00,0x21,0x30,d,c,b,a};
     sendCmd("RT",&params);      // set pose
-    params = {0x04, 0x00,0x10,0x30,0x64,0x00};
-    sendCmd("RT",&params);      //set speed 100% 
+    params = {0x04,0x00,0x11,0x30,0x64,0x00};
+    sendCmd("RT",&params);      //set speed 100%
 
-    // MOT 2
-    params = {0x06, 0x00,0x22,0x30,d,c,b,a};
+    // Motor2
+    pose_hex = intToBytes(mot2_pose);
+    a = *(pose_hex.end()-4);
+    b = *(pose_hex.end()-3);
+    c = *(pose_hex.end()-2);
+    d = *(pose_hex.end()-1);
+
+    params = {0x06,0x00,0x22,0x30,d,c,b,a};
     sendCmd("RT",&params);      // set pose
     params = {0x04, 0x00,0x12,0x30,0x64,0x00};
     sendCmd("RT",&params);      //set speed 100%
 
-
-    params = {0x07, 0x09,0xff};
-    sendCmd("RE",&params);      // move
-
+    // Move All Motors
+    params = {0x07,0x09,0xff};
+    sendCmd("RE",&params);
 }
 
 /*
 * Move Mot1 with input pose (ntick)
 */
 void SerialComTlt::moveMot1(int pose){
+    mot1_pose_target_ = pose;
+
     vector<unsigned char> pose_hex = intToBytes(pose);
     unsigned char a = *(pose_hex.end()-4);
     unsigned char b = *(pose_hex.end()-3);
     unsigned char c = *(pose_hex.end()-2);
-    unsigned char d = *(pose_hex.end()-1); 
+    unsigned char d = *(pose_hex.end()-1);
 
-    vector<unsigned char> params = {0x06, 0x00,0x21,0x30,d,c,b,a};
-    
+    // P1, P2: 0x06, 0x00: 6 Byte Message
+    // P3, P4: 0x21, 0x30: 3021 : Remote Position A1
+    // P5, P6, P7, P8: Position in Big Endian
+    vector<unsigned char> params = {0x06,0x00,0x21,0x30,d,c,b,a};
+
     sendCmd("RT",&params);      // set pose
-    params = {0x04, 0x00,0x11,0x30,0x64,0x00};
-    sendCmd("RT",&params);      //set speed 100% 
-    params = {0x00, 0x09,0xff};
-    sendCmd("RE",&params);      // move
-    
 
+    params = {0x04,0x00,0x11,0x30,0x64,0x00};
+    sendCmd("RT",&params);      //set speed 100%
+
+    params = {0x00,0x09,0xff};
+    sendCmd("RE",&params);      // move
 }
 
 /*
 * Move Mot2 with input pose (ntick)
 */
 void SerialComTlt::moveMot2(int pose){
+    mot2_pose_target_ = pose;
+
     vector<unsigned char> pose_hex = intToBytes(pose);
     unsigned char a = *(pose_hex.end()-4);
     unsigned char b = *(pose_hex.end()-3);
     unsigned char c = *(pose_hex.end()-2);
-    unsigned char d = *(pose_hex.end()-1); 
+    unsigned char d = *(pose_hex.end()-1);
 
     vector<unsigned char> params = {0x06, 0x00,0x22,0x30,d,c,b,a};
-    
+
     sendCmd("RT",&params);      // set pose
-    params = {0x04, 0x00,0x12,0x30,0x64,0x00};
+    params = {0x04,0x00,0x12,0x30,0x64,0x00};
     sendCmd("RT",&params);      //set speed 100%
 
-    params = {0x01, 0x09,0xff};
+    params = {0x01,0x09,0xff};
     sendCmd("RE",&params);      // move
 
 }
@@ -164,17 +182,33 @@ void SerialComTlt::moveMot2(int pose){
 * Control column size
 */
 void SerialComTlt::setColumnSize(float m){
-    if(m >0.53) m = 0.53;
-    if(getColumnSize() == m ) return;  // current pose = asked pose
+    // Check Target is in Bounds
+    if(m > ALL_MOTOR_METERS) m = ALL_MOTOR_METERS;
+    if(m < 0) m = 0;
 
-    mot_ticks_ = (m *  1611.320754717) +10;  //  meters <-> ticks :  max 0.53 <-> 864 | min 0.0 <-> 10
-    int delta1 = abs(mot_ticks_ - mot1_pose_);
-    int delta2 = abs(mot_ticks_ - mot2_pose_);
-    if(m <=0) mot_ticks_ = 10;  // min
-    moveMot1(mot_ticks_);
-    moveMot2(mot_ticks_);
+    // Check if Target is Current
+    if(getColumnSize() == m){
+      return;
+    }
 
+    // Convert Meters to Ticks
+    float mot1_meters = MOTOR1_METER_RATIO * m;
+    float mot2_meters = MOTOR2_METER_RATIO * m;
+
+    int mot1_ticks = static_cast<int>(mot1_meters * MOTOR1_METERS_TO_TICKS);
+    int mot2_ticks = static_cast<int>(mot2_meters * MOTOR2_METERS_TO_TICKS);
+
+    if(mot1_ticks > MOTOR1_TICKS) mot1_ticks = MOTOR1_TICKS;
+    if(mot2_ticks > MOTOR2_TICKS) mot2_ticks = MOTOR2_TICKS;
+
+    cout << "SerialComTlt:setColumnSize - ";
+    cout << "size: " << m << " ";
+    cout << "mot1_ticks: " << mot1_ticks << " ";
+    cout << "mot2_ticks: " << mot2_ticks << " ";
+    cout << endl;
+    moveMotAll(mot1_ticks + MOTOR1_TICK_OFFSET, mot2_ticks + MOTOR2_TICK_OFFSET);
 }
+
 /*
 *  Move up both motors
 */
@@ -184,7 +218,7 @@ void SerialComTlt::moveUp(){
 }
 
 /*
-*  Move down both motors 
+*  Move down both motors
 */
 void SerialComTlt::moveDown(){
     moveMot1Down();
@@ -213,45 +247,58 @@ void SerialComTlt::moveDown(int n){
 
 
 void SerialComTlt::moveMot1Up(){
-    vector<unsigned char> params = {0x00, 0x02, 0xff}; 
+    vector<unsigned char> params = {0x00, 0x02, 0xff};
     sendCmd("RE",&params);  // start moving
 }
 void SerialComTlt::moveMot2Up(){
-    vector<unsigned char> params = {0x01, 0x02, 0xff}; 
+    vector<unsigned char> params = {0x01, 0x02, 0xff};
     sendCmd("RE",&params);  // start moving
 }
 void SerialComTlt::moveMot1Down(){
-    vector<unsigned char> params = {0x00, 0x01, 0xff}; 
+    vector<unsigned char> params = {0x00, 0x01, 0xff};
     sendCmd("RE",&params);  // start moving
 }
 void SerialComTlt::moveMot2Down(){
-    vector<unsigned char> params = {0x01, 0x01, 0xff}; 
+    vector<unsigned char> params = {0x01, 0x01, 0xff};
     sendCmd("RE",&params);  // start moving
 }
 
 void SerialComTlt::stop(){
     stopMot1();
     stopMot2();
+    stopMotAll();
 }
 void SerialComTlt::stopMot1(){
     vector<unsigned char> params = {0x00, 0x00}; // 0 fast stop   1 smooth stop
     sendCmd("RS",&params);  // stop moving
+    cout << "SerialComTlt:stopMot1" << endl;
 }
 void SerialComTlt::stopMot2(){
-    vector<unsigned char> params = {0x01, 0x00}; 
+    vector<unsigned char> params = {0x01, 0x00};
     sendCmd("RS",&params);  // stop moving
+    cout << "SerialComTlt:stopMot2" << endl;
 }
 void SerialComTlt::stopMotAll(){
     vector<unsigned char> params = {0x07, 0x00}; // 0 fast stop   1 smooth stop
     sendCmd("RS",&params);  // stop moving
+    cout << "SerialComTlt::stopMotAll" << endl;
 }
 
 float SerialComTlt::getColumnSize(){
     getPoseM1();
     getPoseM2();
 
-    current_pose_ = float((mot1_pose_+ mot2_pose_) - 20)*0.000310304;
-    return current_pose_; 
+    int mot1_norm_pose = mot1_pose_ - MOTOR1_TICK_OFFSET;
+    if(mot1_norm_pose < 0) mot1_norm_pose = 0;
+
+    int mot2_norm_pose = mot2_pose_ - MOTOR2_TICK_OFFSET;
+    if(mot2_norm_pose < 0) mot2_norm_pose = 0;
+
+    float mot1_meters = static_cast<float>(mot1_norm_pose * MOTOR1_TICKS_TO_METERS);
+    float mot2_meters = static_cast<float>(mot2_norm_pose * MOTOR2_TICKS_TO_METERS);
+
+    current_pose_ = mot1_meters + mot2_meters;
+    return current_pose_;
 }
 
 void SerialComTlt::getPoseM1(){
@@ -267,7 +314,7 @@ void SerialComTlt::getPoseM2(){
 
 
 /*
-* Loop to maintain the remote function with RC command
+ * Loop to maintain the remote function with RC command
 */
 void SerialComTlt::comLoop(){
     vector<unsigned char> params = {0x01, 0x00, 0xff};
@@ -275,12 +322,12 @@ void SerialComTlt::comLoop(){
         while(com_started_){
 
             sendCmd("RC",&params);
-            
+
             if(!manual_target_ && (go_up_ || go_down_)){
                 manual_target_ = true;
                 if(go_up_) moveUp();
                 else moveDown();
-                
+
             }
             else{
                 getColumnSize();
@@ -289,12 +336,22 @@ void SerialComTlt::comLoop(){
                     setColumnSize(current_target_);
                     last_target_ = current_target_;
                     process_target_= true;
+            cout << "SerialComTtl::comLoop - start processing target" << endl;
                 }
 
                 if(process_target_ && (mot1_pose_ ==  mot_ticks_)){
-                    stop();
+                stop();
+            cout << "SerialComTlt::comLoop - stop processing target" << endl;
                     process_target_= false;
                 }
+
+            if(((mot1_pose_target_ + margin_) >= mot1_pose_) && ((mot1_pose_target_ - margin_) <= mot1_pose_)){
+                stopMot1();
+            }
+            if(((mot2_pose_target_ + margin_) >= mot2_pose_) && ((mot2_pose_target_ - margin_) <= mot2_pose_)){
+                stopMot2();
+            }
+
             }
             if(manual_target_ && !go_up_ && !go_down_){
                 stop();
@@ -318,7 +375,7 @@ bool SerialComTlt::sendCmd(string cmd, vector<unsigned char> *param){
         if (debug_) cout << item;
         final_cmd.push_back(int(item));  // convert cmd string in hex value
     }
-    
+
     if (debug_) cout <<" [";
     if (!param->empty()){
         for(vector<unsigned char>::iterator it=param->begin(); it!=param->end(); ++it){
@@ -341,7 +398,7 @@ bool SerialComTlt::sendCmd(string cmd, vector<unsigned char> *param){
         // stringstream checksum_hex;
         // checksum_hex << hex << checksum;
         // cout << "Checksum = "<< checksum_hex.str() << endl;
-        
+
         stringstream final_cmd_hex;
         for (unsigned short j: final_cmd){
             final_cmd_hex <<  hex << j << ' ';
@@ -361,7 +418,7 @@ bool SerialComTlt::sendCmd(string cmd, vector<unsigned char> *param){
         }
     }
     usleep(10);
-    
+
     vector<unsigned char> output = feedback();
      if(output.size() == 0){
         cout << "SerialComTlt::sendCmd - Response empty" << endl;
@@ -375,7 +432,7 @@ bool SerialComTlt::sendCmd(string cmd, vector<unsigned char> *param){
         }
         cout << "SerialComTlt::sendCmd - Response: " << output_hex.str()<< endl;
     }
-   
+
     if(!checkResponseChecksum(&output) || !checkResponseAck(&output)){
         cout << "SerialComTlt::sendCmd - Cmd failed, retry" << endl;
         serial_tlt_.flush();
@@ -397,11 +454,11 @@ bool SerialComTlt::sendCmd(string cmd, vector<unsigned char> *param){
             return false;
         }
     }
-    
+
     if(cmd =="RG"){
         if( *(param->begin()) == 0x11 )    extractPose(&output,1);
         else if( *(param->begin()) == 0x12 )    extractPose(&output,2);
-        
+
     }
     if (debug_) cout <<"----------------------" << endl;
 
@@ -427,7 +484,7 @@ bool SerialComTlt::sendCmd(string cmd, vector<unsigned char> *param){
 
             last_data = serial_tlt_.read();
 
-            if(!first_byte && last_data =="R"){  // Beginning of the message 
+            if(!first_byte && last_data =="R"){  // Beginning of the message
                 first_byte = true;
                 for (const auto &item : last_data) {
                     received_data.push_back(int(item));  // convert cmd string in hex value
@@ -442,8 +499,8 @@ bool SerialComTlt::sendCmd(string cmd, vector<unsigned char> *param){
                 }
 
                 // command detector
-                if(i==2){  
-                    command_type = last_data; 
+                if(i==2){
+                    command_type = last_data;
                     if (debug_) cout << "Response Command type : R"<< command_type << endl;
                 }
 
@@ -452,10 +509,10 @@ bool SerialComTlt::sendCmd(string cmd, vector<unsigned char> *param){
                     success = true;
                 }
 
-                
+
                 if(command_type =="G")  {
                     if (i == 4 && success) {
-                        
+
                         for (const auto &item : last_data) {
                             msg_size = 7 + int(item);
                         }
@@ -513,7 +570,7 @@ bool SerialComTlt::checkResponseChecksum(vector<unsigned char> *response){
         checksum_hex << hex << checksum;
         cout << "SerialComTlt::checkResponseChecksum - Response Checksum = "<< checksum_hex.str() << endl;
     }
-    
+
     vector<unsigned char> response_msg = *response;
     response_msg.resize(response_msg.size()-2);
 
@@ -527,7 +584,7 @@ bool SerialComTlt::checkResponseChecksum(vector<unsigned char> *response){
         checksum_hex << hex << checksum2;
         cout << "SerialComTlt::checkResponseChecksum - Computed Checksum = "<< checksum_hex.str() << endl;
     }
-    
+
     if(response_checksum_lsb == computed_lsb && response_checksum_msb == computed_msb){
         return true;
     }
@@ -544,7 +601,7 @@ bool SerialComTlt::checkResponseAck(vector<unsigned char> *response){
         if(cmd_status == 0x06 ){
             return true;
         }
-    
+
         else if (cmd_status == 0x81 ){
             cout << "SerialComTlt::checkResponseAck - Cmd Fail! :  Error 81 Parameter data error "<< endl;
         }

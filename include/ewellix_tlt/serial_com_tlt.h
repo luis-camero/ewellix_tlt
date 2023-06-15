@@ -1,33 +1,47 @@
+#ifndef TLTCOM_H
+#define TLTCOM_H
 
-
-#include <iostream>
-#include "serial/serial.h"
-#include <string>
-#include <vector>
-#include <sstream>
-#include <time.h>
-#include <cmath>
-#include <fstream>
-#include <csignal>
-#include <mutex>
+#include <atomic>
 #include <boost/circular_buffer.hpp>
 #include <chrono>
-#include <thread>
-#include <unistd.h>
+#include <cmath>
+#include <csignal>
+#include <fstream>
+#include <iostream>
 #include <mutex>
-#include <atomic>
+#include <sstream>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string>
+#include <thread>
+#include <time.h>
+#include <unistd.h>
+#include <vector>
+#include "serial/serial.h"
 
 using namespace std;
 
-/**
-* Class representing Serial communication with the TLT Columns
+const int MOTOR1_TICKS = 850;
+const int MOTOR1_TICK_OFFSET = 10;
+const float MOTOR1_METERS = 0.265;
+const float MOTOR1_METERS_TO_TICKS = MOTOR1_TICKS / MOTOR1_METERS;
+const float MOTOR1_TICKS_TO_METERS = MOTOR1_METERS / MOTOR1_TICKS;
+
+const int MOTOR2_TICKS = 850;
+const int MOTOR2_TICK_OFFSET = 10;
+const float MOTOR2_METERS = 0.265;
+const float MOTOR2_METERS_TO_TICKS = MOTOR2_TICKS / MOTOR2_METERS;
+const float MOTOR2_TICKS_TO_METERS = MOTOR2_METERS / MOTOR2_TICKS;
+
+const float ALL_MOTOR_METERS = MOTOR1_METERS + MOTOR2_METERS;
+const float ALL_MOTOR_TICKS = MOTOR1_TICKS + MOTOR2_TICKS;
+
+const float MOTOR1_METER_RATIO = MOTOR1_METERS / (ALL_MOTOR_METERS);
+const float MOTOR2_METER_RATIO = MOTOR2_METERS / (ALL_MOTOR_METERS);
+
+/*
+Class representing Serial communication with the TLT Columns
 */
-
-
-
-
 class SerialComTlt
 {
     public:
@@ -45,10 +59,9 @@ class SerialComTlt
         void moveDown();
         void stop();
         void setColumnSize(float m);
-        
+        float getColumnSize();
 
         void comLoop();
-
 
         bool run_;
         float current_target_;
@@ -56,6 +69,15 @@ class SerialComTlt
         bool go_up_;
         bool go_down_;
 
+        int mot1_pose_;
+        int mot2_pose_;
+
+        void moveMot1(int);
+        void moveMot2(int);
+
+        int mot1_pose_target_;
+        int mot2_pose_target_;
+        int margin_ = 1;
 
     private:
 
@@ -63,14 +85,14 @@ class SerialComTlt
         bool debug_;
         bool stop_loop_;
         bool com_started_;
-        int mot1_pose_;
-        int mot2_pose_;
+        //int mot1_pose_;JTA_SERVER_H
+        //int mot2_pose_;
         float last_target_;
         int mot_ticks_;
         bool process_target_;
         bool manual_target_;
         mutex lock_;
-       
+
 
         vector<unsigned char> intToBytes(int paramInt);
         void thread_loop();
@@ -80,15 +102,12 @@ class SerialComTlt
         bool checkResponseChecksum(vector<unsigned char>*);
         bool checkResponseAck(vector<unsigned char>*);
         bool extractPose(vector<unsigned char>*,int);
-        float getColumnSize();
 
         void getPoseM1();
         void getPoseM2();
 
         // Motors control with pose
-        void moveMot1(int);
-        void moveMot2(int);
-        void moveMotAll(int);
+        void moveMotAll(int, int);
         // Simple motors control
         void moveMot1Up();
         void moveMot2Up();
@@ -133,5 +152,6 @@ class SerialComTlt
             0xEF1F,0xFF3E,0xCF5D,0xDF7C,0xAF9B,0xBFBA,0x8FD9,0x9FF8,
             0x6E17,0x7E36,0x4E55,0x5E74,0x2E93,0x3EB2,0x0ED1,0x1EF0
         };
-
 };
+
+#endif //TLTCOM_H
