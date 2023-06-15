@@ -13,9 +13,6 @@
 #include <thread>
 #include <chrono>
 
-#include <actionlib/server/simple_action_server.h>
-#include <control_msgs/FollowJointTrajectoryAction.h>
-
 
 class TltNode
 {
@@ -39,9 +36,6 @@ class TltNode
         ros::Subscriber sub_motor1_ticks_;
         ros::Subscriber sub_motor2_ticks_;
 
-        // Actions
-        actionlib::ActionServer<control_msgs::FollowJointTrajectoryAction> srv_joint_traj_;
-
         // ROS Callback
         void cbColumnSize( std_msgs::Float32);
         void cbDurationUp( std_msgs::Int16);
@@ -49,8 +43,6 @@ class TltNode
         void cbMotor1Ticks( std_msgs::Int32);
         void cbMotor2Ticks( std_msgs::Int32);
         void cbJoy( sensor_msgs::Joy);
-        void cbJointTrajReceived(actionlib::ActionServer<control_msgs::FollowJointTrajectoryAction>::GoalHandle goal_handle);
-        void cbJointTrajPreempted(actionlib::ActionServer<control_msgs::FollowJointTrajectoryAction>::GoalHandle goal_handle);
         void publishJoinStates();
 };
 

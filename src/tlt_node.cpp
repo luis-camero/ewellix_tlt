@@ -1,16 +1,8 @@
 #include "ewellix_tlt/tlt_node.h"
 
 
-TltNode::TltNode(ros::NodeHandle private_nh):
-    srv_joint_traj_(
-        private_nh,
-        "follow_joint_trajectory",
-        boost::bind(&TltNode::cbJointTrajReceived, this, _1),
-        boost::bind(&TltNode::cbJointTrajPreempted, this, _1),
-        false
-    )
+TltNode::TltNode(ros::NodeHandle private_nh)
 {
-
     // Publishers
     pub_column_pose_ = private_nh.advertise<sensor_msgs::JointState>("joint_states", 1000);
 
@@ -32,16 +24,6 @@ TltNode::TltNode(ros::NodeHandle private_nh):
     sub_motor2_ticks_ = private_nh.subscribe("/ewellix/motor2_ticks", 1, &TltNode::cbMotor2Ticks, this);
 
     sub_joy_ = private_nh.subscribe("/joy", 1, &TltNode::cbJoy,this);
-
-    // Action
-    // srv_joint_traj_(
-    //     private_nh,
-    //     "follow_joint_trajectory",
-    //     boost::bind(&TltNode::cbJointTrajReceived, this, _1),
-    //     boost::bind(&TltNode::cbJointTrajPreempted, this, _1),
-    //     false
-    // );
-
 
     cout << "connecting to serial " << port << " at baud rate " << baudrate <<endl;
     if(srl_.startSerialCom(port,baudrate)){
@@ -91,24 +73,6 @@ void TltNode::publishJoinStates(){
         pub_column_pose_.publish(joint_states);
         rateController.sleep();
     }
-}
-
-void TltNode::cbJointTrajReceived(actionlib::ActionServer<control_msgs::FollowJointTrajectoryAction>::GoalHandle goal_handle){
-    // Trajectory Points to List of Heights
-    for (unsigned int i = 0; i < goal_handle.getGoal()->trajectory.points.size(); i++)
-    {
-        float error = 0.005;
-        const auto traj_point = goal_handle.getGoal()->trajectory.points.at(i);
-        srl_.setColumnSize(traj_point.positions[0]);
-        while(srl_.getColumnSize() > traj_point.positions[0] - error && srl_.getColumnSize() < traj_point.positions[0] + error)
-        {
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        }
-    }
-}
-
-void TltNode::cbJointTrajPreempted(actionlib::ActionServer<control_msgs::FollowJointTrajectoryAction>::GoalHandle goal_handle){
-    srl_.stop();
 }
 
 void TltNode::cbColumnSize( std_msgs::Float32 msg){
