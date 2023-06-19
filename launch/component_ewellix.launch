@@ -12,7 +12,8 @@
 
     <!-- Ewellix ROS Node   -->
     <node name="ewellix_tlt_node" pkg="ewellix_tlt" type="ewellix_tlt_node" output="screen" respawn="true" >
-        <param name="/ewellix/port" value="/dev/ttyUSB0" />
+      <param name="/ewellix/port" value="/dev/ttyUSB0" />i
+      <remap from="~/joint_states" to="/joint_states"/>
     </node>
 
 
