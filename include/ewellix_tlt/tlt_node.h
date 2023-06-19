@@ -5,6 +5,7 @@
 #include "sensor_msgs/JointState.h"
 #include "sensor_msgs/Joy.h"
 #include "serial_com_tlt.h"
+#include "std_srvs/Trigger.h"
 #include "std_msgs/Float32.h"
 #include "std_msgs/Empty.h"
 #include "std_msgs/Int16.h"
@@ -27,6 +28,9 @@ class TltNode
         // Publishers
         ros::Publisher pub_column_pose_;
 
+        // Services
+        ros::ServiceServer srv_init_sequence_;
+
         // Subscribers
         ros::Subscriber sub_column_size_;
         ros::Subscriber sub_column_duration_down_;
@@ -36,7 +40,7 @@ class TltNode
         ros::Subscriber sub_motor1_ticks_;
         ros::Subscriber sub_motor2_ticks_;
 
-        // ROS Callback
+        // Subscriber Callback
         void cbColumnSize( std_msgs::Float32);
         void cbDurationUp( std_msgs::Int16);
         void cbDurationDown( std_msgs::Int16);
@@ -44,6 +48,10 @@ class TltNode
         void cbMotor2Ticks( std_msgs::Int32);
         void cbJoy( sensor_msgs::Joy);
         void publishJoinStates();
+
+        // Service Calls
+        bool srvInitSequence(std_srvs::Trigger::Request &req, std_srvs::Trigger::Response &res);
+
 };
 
 #endif //TLTNODE_H

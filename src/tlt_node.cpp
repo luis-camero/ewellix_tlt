@@ -14,6 +14,8 @@ TltNode::TltNode(ros::NodeHandle private_nh)
     private_nh.param<string>("ewellix/port", port, "/dev/ttyUSB0");
     private_nh.param<int>("ewellix/baudrate", baudrate, 38400);
 
+    // Services
+    srv_init_sequence_ = private_nh.adverstiseService("init_sequence", &TltNode::srvInitSequence, this)
 
     // Subscribers
     sub_column_size_ = private_nh.subscribe("/ewellix/size", 1, &TltNode::cbColumnSize,this);
@@ -100,8 +102,14 @@ void TltNode::cbJoy( sensor_msgs::Joy msg){
 
     srl_.go_up_ = msg.buttons[13];
     srl_.go_down_ = msg.buttons[14];
-
 }
+
+bool TltNode::srvInitSequence(std_srvs::Trigger::Request &req,
+                                std_srvs::Trigger::Response &res){
+    ROS_INFO("IN srvInitSequence")
+    return true
+}
+
 
 
 int main(int argc, char *argv[]){
