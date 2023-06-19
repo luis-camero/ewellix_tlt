@@ -1,9 +1,6 @@
 <?xml version="1.0"?>
 <launch>
 
-
-    <param name="robot_description" command="$(find xacro)/xacro '$(find ewellix_tlt)/urdf/ewellix_lift_std.urdf.xacro' --inorder cut_model:=true  ewellix_lift_model:=lift_500mm" />
-
     <!-- Publish tfs -->
     <node name="robot_state_publisher_ewellix" pkg="robot_state_publisher" type="robot_state_publisher" respawn="true" />
 
