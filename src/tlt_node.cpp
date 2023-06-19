@@ -62,16 +62,21 @@ void TltNode::publishJoinStates(){
     while(ros::ok()) {
         joint_states.header.frame_id = "";
         joint_states.header.stamp = ros::Time::now();
-        joint_states.name.resize(4);
-        joint_states.position.resize(4);
+        int size = 1;
+        joint_states.name.resize(size);
+        joint_states.position.resize(size);
+        joint_states.velocity.resize(size);
+        joint_states.effort.resize(size);
         joint_states.name[0] = "ewellix_lift_top_joint";
         joint_states.position[0] = srl_.current_pose_;
-        joint_states.name[1] = "mot1";
-        joint_states.position[1] = srl_.mot1_pose_;
-        joint_states.name[2] = "mot2";
-        joint_states.position[2] = srl_.mot2_pose_;
-        joint_states.name[3] = "mot1_mot2";
-        joint_states.position[3] = srl_.mot1_pose_ + srl_.mot2_pose_;
+        joint_states.velocity[0] = 0.0;
+        joint_states.effort[0] = 0.1;
+        //joint_states.name[1] = "mot1";
+        //joint_states.position[1] = srl_.mot1_pose_;
+        //joint_states.name[2] = "mot2";
+        //joint_states.position[2] = srl_.mot2_pose_;
+        //joint_states.name[3] = "mot1_mot2";
+        //joint_states.position[3] = srl_.mot1_pose_ + srl_.mot2_pose_;
         pub_column_pose_.publish(joint_states);
         rateController.sleep();
     }
