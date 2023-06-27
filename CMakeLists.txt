@@ -5,6 +5,8 @@ add_compile_options(-std=c++11)
 
 
 set(${PROJECT_NAME}_CATKIN_DEPS
+  actionlib
+  control_msgs
   roscpp
   rospy
   std_msgs
@@ -12,7 +14,13 @@ set(${PROJECT_NAME}_CATKIN_DEPS
   serial
 )
 
-find_package(catkin REQUIRED COMPONENTS ${${PROJECT_NAME}_CATKIN_DEPS} )
+find_package(
+  catkin
+  REQUIRED COMPONENTS
+  ${${PROJECT_NAME}_CATKIN_DEPS}
+)
+
+find_package(Boost REQUIRED)
 
 ################################################
 ## Declare ROS messages, services and actions ##
@@ -29,18 +37,19 @@ find_package(catkin REQUIRED COMPONENTS ${${PROJECT_NAME}_CATKIN_DEPS} )
 ###################################
 
 catkin_package(
-#  INCLUDE_DIRS include
+ INCLUDE_DIRS include
   LIBRARIES serial ${PROJECT_NAME}
   CATKIN_DEPENDS ${${PROJECT_NAME}_CATKIN_DEPS}
-  DEPENDS boost
+  DEPENDS Boost
 )
 
 ###########
 ## Build ##
 ###########
 
+link_directories(${Boost_LIBRARY_DIR})
 
-include_directories(include 
+include_directories(include
   ${catkin_INCLUDE_DIRS}
 	${Boost_INCLUDE_DIRS}
 )
@@ -49,17 +58,19 @@ include_directories(include
 add_executable(${PROJECT_NAME}_node
   src/tlt_node.cpp
   src/serial_com_tlt.cpp
+  src/single_joint_position_server.cpp
  )
 
 
 add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
- target_link_libraries(
+target_link_libraries(
    ${PROJECT_NAME}_node
    serial
    ${catkin_LIBRARIES}
- )
- 
+)
+
+
 
 #############
 ## Install ##

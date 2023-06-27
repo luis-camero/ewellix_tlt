@@ -14,6 +14,12 @@ TltNode::TltNode(ros::NodeHandle private_nh)
     private_nh.param<string>("ewellix/port", port, "/dev/ttyUSB0");
     private_nh.param<int>("ewellix/baudrate", baudrate, 38400);
 
+    // Action Server
+    act_srv_single_joint_position_ = new SingleJointPositionActionServer(
+        "test_server/single_joint_position",
+        private_nh,
+        &srl_);
+
     // Services
     srv_init_sequence_ = private_nh.advertiseService("init_sequence", &TltNode::srvInitSequence, this);
 
@@ -118,6 +124,12 @@ bool TltNode::srvInitSequence(std_srvs::Trigger::Request &req,
     res.success = true;
     res.message = "Moved arm to max and min positions.";
     return true;
+}
+
+void actSingleJointPosition(const control_msgs::SingleJointPositionGoalConstPtr &goal){
+    bool success = true;
+    ROS_INFO("executing single joint position");
+
 }
 
 
