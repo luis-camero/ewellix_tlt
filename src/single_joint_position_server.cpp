@@ -19,9 +19,34 @@ SingleJointPositionActionServer::~SingleJointPositionActionServer(){
 }
 
 void SingleJointPositionActionServer::goal_received_callback(actionlib::ActionServer<control_msgs::SingleJointPositionAction>::GoalHandle new_goal){
-    ROS_INFO("new goal received");
-}
+    ROS_INFO("New Goal Received");
+    bool success = true;
 
+    if(is_goal_acceptable(new_goal)){
+        goal_ = new_goal;
+        goal_.setAccepted();
+    }
+    else{
+        new_goal.setRejected();
+        return;
+    }
+
+    srl_->process_target_ = true;
+    srl_->setColumnSize(goal_.getGoal()->position);
+    while(srl_->process_target_)
+    {
+        ROS_INFO("Moving...");
+        sleep(1);
+    }
+    if(success)
+    {
+        ROS_INFO("Done.");
+    }
+    else
+    {
+        ROS_INFO("Failed.");
+    }
+}
 
 void SingleJointPositionActionServer::preempt_received_callback(actionlib::ActionServer<control_msgs::SingleJointPositionAction>::GoalHandle goal){
     ROS_INFO("goal preempted");

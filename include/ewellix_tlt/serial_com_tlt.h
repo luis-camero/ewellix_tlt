@@ -64,6 +64,7 @@ class SerialComTlt
         void comLoop();
 
         bool run_;
+        bool process_target_;
         float current_target_;
         float current_pose_;
         bool go_up_;
@@ -89,7 +90,6 @@ class SerialComTlt
         //int mot2_pose_;
         float last_target_;
         int mot_ticks_;
-        bool process_target_;
         bool manual_target_;
         mutex lock_;
 
