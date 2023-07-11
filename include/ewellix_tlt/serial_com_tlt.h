@@ -45,6 +45,14 @@ Class representing Serial communication with the TLT Columns
 class SerialComTlt
 {
     public:
+        enum State {
+            INIT,
+            IDLE,
+            MOTION,
+            COMPLETE,
+            FAILURE,
+        };
+
         SerialComTlt();
         ~SerialComTlt();
 
@@ -69,15 +77,17 @@ class SerialComTlt
         bool go_up_;
         bool go_down_;
 
-        int mot1_pose_;
-        int mot2_pose_;
-
         void moveMot1(int);
         void moveMot2(int);
 
-        int mot1_pose_target_;
-        int mot2_pose_target_;
         int margin_ = 1;
+
+        State state_;
+        State next_state_;
+        State initState();
+        State idleState();
+        State motionState();
+        State failureState();
 
     private:
 
@@ -95,27 +105,114 @@ class SerialComTlt
 
 
         vector<unsigned char> intToBytes(int paramInt);
-        void thread_loop();
-        unsigned short calculateChecksum (vector<unsigned char>*);
         bool sendCmd(string, vector<unsigned char>*);
         vector<unsigned char> feedback ();
+        unsigned short calculateChecksum (vector<unsigned char>*);
         bool checkResponseChecksum(vector<unsigned char>*);
         bool checkResponseAck(vector<unsigned char>*);
-        bool extractPose(vector<unsigned char>*,int);
-
-        void getPoseM1();
-        void getPoseM2();
 
         // Motors control with pose
         void moveMotAll(int, int);
-        // Simple motors control
-        void moveMot1Up();
-        void moveMot2Up();
-        void moveMot1Down();
-        void moveMot2Down();
-        void stopMot1();
-        void stopMot2();
-        void stopMotAll();
+
+        /*
+        Motor Encoder Pose: 
+         - in encoder ticks.
+         - range: 10 - 850 ticks
+        */
+        // Variables
+        int mot1_pose_;
+        int mot2_pose_;
+        int mot1_pose_target_;
+        int mot2_pose_target_;
+        // Commands: Get Pose (RG)
+        const std::vector<unsigned char> GET_POSE_M1 = {0x11, 0x00};
+        const std::vector<unsigned char> GET_POSE_M2 = {0x12, 0x00};
+        bool extractPose(vector<unsigned char>*, int);
+        void getPoseM1();
+        void getPoseM2();
+        // Commands: Set Pose (RT)
+        const std::vector<unsigned char> SET_POSE_M1 = {0x06, 0x00, 0x21, 0x30};
+        const std::vector<unsigned char> SET_POSE_M2 = {0x06, 0x00, 0x22, 0x30};
+        void setPoseM1(int pose);
+        void setPoseM2(int pose);
+
+        /*
+        Motor Percentage Speed
+         - in percentage.
+         - range: 0 - 100 percent
+        */
+        // Variables
+        int mot1_percent_speed_;
+        int mot2_percent_speed_;
+        // Commands: Get Speed (RG)
+        const std::vector<unsigned char> GET_SPEED_M1 = {0xF1, 0X00};
+        const std::vector<unsigned char> GET_SPEED_M2 = {0xF2, 0X00};
+        bool extractSpeed(vector<unsigned char>*, int);
+        void getPercentSpeedM1();
+        void getPercentSpeedM2();
+        // Commands: Set Speed (RT)
+        const std::vector<unsigned char> SET_SPEED_M1 = {0x04, 0x00, 0x11, 0x30};
+        const std::vector<unsigned char> SET_SPEED_M2 = {0x04, 0x00, 0x12, 0x30};
+        void setPercentSpeedM1(float speed);
+        void setPercentSpeedM2(float speed);
+
+        /*
+        Motor Status
+         - three boolean variables
+         - bit0: initialized
+         - bit1: retracting
+         - bit2: extending
+        */
+        // Variables
+        bool mot1_initialized_;
+        bool mot1_retracting_;
+        bool mot1_extending_;
+        bool mot2_initialized_;
+        bool mot2_retracting_;
+        bool mot2_extending_;
+        // Commands: Get Status (RG)
+        const std::vector<unsigned char> GET_STATUS_M1 = {0xE1, 0X00};
+        const std::vector<unsigned char> GET_STATUS_M2 = {0xE2, 0X00};
+        bool extractStatus(vector<unsigned char>*, int);
+        void getStatusM1();
+        void getStatusM2();
+
+        /*
+        Trigger Motor Movement or Stop
+        */
+        // Commands: Move Motors (RE)
+        const std::vector<unsigned char> MOVE_M1_DOWN = {0x00, 0x01, 0xff};
+        const std::vector<unsigned char> MOVE_M1_POSE = {0x00, 0x09, 0xff};
+        const std::vector<unsigned char> MOVE_M1_UP = {0x00, 0x02, 0xff};
+        void moveM1Down();
+        void moveM1Pose();
+        void moveM1Up();
+        
+        const std::vector<unsigned char> MOVE_M2_DOWN = {0x01, 0x01, 0xff};
+        const std::vector<unsigned char> MOVE_M2_POSE = {0x01, 0x09, 0xff};
+        const std::vector<unsigned char> MOVE_M2_UP = {0x01, 0x02, 0xff};
+        void moveM2Down();
+        void moveM2Pose();
+        void moveM2Up();
+
+        const std::vector<unsigned char> MOVE_ALL_DOWN = {0x07, 0x01, 0xff};
+        const std::vector<unsigned char> MOVE_ALL_POSE = {0x07, 0x09, 0xff};
+        const std::vector<unsigned char> MOVE_ALL_UP = {0x07, 0x02, 0xff};
+        void moveAllDown();
+        void moveAllPose();
+        void moveAllUp();
+    
+        // Commands: Stop Motors (RS)
+        const std::vector<unsigned char> STOP_M1_FAST = {0x00, 0x00};
+        const std::vector<unsigned char> STOP_M1_SLOW = {0x00, 0x01};
+        const std::vector<unsigned char> STOP_M2_FAST = {0x01, 0x00};
+        const std::vector<unsigned char> STOP_M2_SLOW = {0x01, 0x01};
+        const std::vector<unsigned char> STOP_ALL_FAST = {0x07, 0x00};
+        const std::vector<unsigned char> STOP_ALL_SLOW = {0x07, 0x01};
+        void stopM1();
+        void stopM2();
+        void stopAll();
+
 
         // For the Checksum
         unsigned short CRC_TABLE[256] = {
