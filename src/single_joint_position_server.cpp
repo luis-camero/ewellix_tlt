@@ -31,12 +31,13 @@ void SingleJointPositionActionServer::goal_received_callback(actionlib::ActionSe
         return;
     }
 
-    srl_->process_target_ = true;
-    srl_->setColumnSize(goal_.getGoal()->position);
-    while(srl_->process_target_)
+    bool moving = true;
+    srl_->current_target_ = goal_.getGoal()->position;
+    while(moving)
     {
         ROS_INFO("Moving...");
         sleep(1);
+        moving = srl_->process_target_;
     }
     if(success)
     {
@@ -50,10 +51,14 @@ void SingleJointPositionActionServer::goal_received_callback(actionlib::ActionSe
 
 void SingleJointPositionActionServer::preempt_received_callback(actionlib::ActionServer<control_msgs::SingleJointPositionAction>::GoalHandle goal){
     ROS_INFO("goal preempted");
+    srl_->stop();
+    sleep(1);
+    goal_received_callback(goal);
 }
 
 void SingleJointPositionActionServer::stop_all_movement(){
     ROS_INFO("stop all movement");
+    srl_->stop();
 }
 
 bool SingleJointPositionActionServer::is_goal_acceptable(actionlib::ActionServer<control_msgs::SingleJointPositionAction>::GoalHandle goal){

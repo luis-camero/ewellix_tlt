@@ -92,6 +92,9 @@ bool SerialComTlt::stopRs232Com(){
 * Move both with input pose (ntick)
 */
 void SerialComTlt::moveMotAll(int mot1_pose, int mot2_pose){
+    mot1_pose_target_ = mot1_pose;
+    mot2_pose_target_ = mot2_pose;
+
     vector<unsigned char> params;
     vector<unsigned char> pose_hex;
     unsigned char a;
@@ -159,8 +162,6 @@ void SerialComTlt::moveMot1(int pose){
 * Move Mot2 with input pose (ntick)
 */
 void SerialComTlt::moveMot2(int pose){
-    mot2_pose_target_ = pose;
-
     vector<unsigned char> pose_hex = intToBytes(pose);
     unsigned char a = *(pose_hex.end()-4);
     unsigned char b = *(pose_hex.end()-3);
@@ -312,7 +313,6 @@ void SerialComTlt::getPoseM2(){
     if (debug_) cout <<"SerialComTlt::getPoseM2 - Motor2 ntick: " << mot2_pose_ <<endl ;
 }
 
-
 /*
  * Loop to maintain the remote function with RC command
 */
@@ -331,26 +331,27 @@ void SerialComTlt::comLoop(){
             }
             else{
                 getColumnSize();
-                if(current_target_ !=last_target_){
+                if(current_target_ != last_target_){
                     if (process_target_) stop();
                     setColumnSize(current_target_);
                     last_target_ = current_target_;
                     process_target_= true;
-            cout << "SerialComTtl::comLoop - start processing target" << endl;
+                    cout << "SerialComTtl::comLoop - start processing target" << endl;
                 }
-
-                if(process_target_ && (mot1_pose_ ==  mot_ticks_)){
-                stop();
-            cout << "SerialComTlt::comLoop - stop processing target" << endl;
-                    process_target_= false;
+                if(process_target_){
+                    if(((mot1_pose_target_ + margin_) >= mot1_pose_) && ((mot1_pose_target_ - margin_) <= mot1_pose_) &&
+                        ((mot2_pose_target_ + margin_) >= mot2_pose_) && ((mot2_pose_target_ - margin_) <= mot2_pose_)){
+                        stop();
+                        cout << "SerialComTlt::comLoop - stop processing target" << endl;
+                        process_target_= false;
+                    }
                 }
-
-            if(((mot1_pose_target_ + margin_) >= mot1_pose_) && ((mot1_pose_target_ - margin_) <= mot1_pose_)){
-                stopMot1();
-            }
-            if(((mot2_pose_target_ + margin_) >= mot2_pose_) && ((mot2_pose_target_ - margin_) <= mot2_pose_)){
-                stopMot2();
-            }
+            // if(((mot1_pose_target_ + margin_) >= mot1_pose_) && ((mot1_pose_target_ - margin_) <= mot1_pose_)){
+            //     stopMot1();
+            // }
+            // if(((mot2_pose_target_ + margin_) >= mot2_pose_) && ((mot2_pose_target_ - margin_) <= mot2_pose_)){
+            //     stopMot2();
+            // }
 
             }
             if(manual_target_ && !go_up_ && !go_down_){
