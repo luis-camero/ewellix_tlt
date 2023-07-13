@@ -104,8 +104,8 @@ class SerialComTlt
         mutex lock_;
 
 
-        vector<unsigned char> intToBytes(int paramInt);
-        bool sendCmd(string, vector<unsigned char>*);
+        vector<unsigned char> intToBytes(unsigned int paramInt);
+        bool sendCmd(string, vector<unsigned char>);
         vector<unsigned char> feedback ();
         unsigned short calculateChecksum (vector<unsigned char>*);
         bool checkResponseChecksum(vector<unsigned char>*);
@@ -133,8 +133,8 @@ class SerialComTlt
         // Commands: Set Pose (RT)
         const std::vector<unsigned char> SET_POSE_M1 = {0x06, 0x00, 0x21, 0x30};
         const std::vector<unsigned char> SET_POSE_M2 = {0x06, 0x00, 0x22, 0x30};
-        void setPoseM1(int pose);
-        void setPoseM2(int pose);
+        void setPoseM1(unsigned int pose);
+        void setPoseM2(unsigned int pose);
 
         /*
         Motor Percentage Speed
@@ -147,14 +147,14 @@ class SerialComTlt
         // Commands: Get Speed (RG)
         const std::vector<unsigned char> GET_SPEED_M1 = {0xF1, 0X00};
         const std::vector<unsigned char> GET_SPEED_M2 = {0xF2, 0X00};
-        bool extractSpeed(vector<unsigned char>*, int);
+        bool extractPercentSpeed(vector<unsigned char>*, int);
         void getPercentSpeedM1();
         void getPercentSpeedM2();
         // Commands: Set Speed (RT)
         const std::vector<unsigned char> SET_SPEED_M1 = {0x04, 0x00, 0x11, 0x30};
         const std::vector<unsigned char> SET_SPEED_M2 = {0x04, 0x00, 0x12, 0x30};
-        void setPercentSpeedM1(float speed);
-        void setPercentSpeedM2(float speed);
+        void setPercentSpeedM1(unsigned int percent);
+        void setPercentSpeedM2(unsigned int percent);
 
         /*
         Motor Status
