@@ -209,6 +209,16 @@ void SerialComTlt::setColumnSize(float m){
     moveMotAll(mot1_ticks + MOTOR1_TICK_OFFSET, mot2_ticks + MOTOR2_TICK_OFFSET);
 }
 
+// Macro Functions
+// - high level functions that read from global variables
+/*Check if motors full retracted*/
+bool SerialComTlt::isRetracted(){
+
+}
+
+
+// Composite Commands
+// - commands that make multiple serial calls
 /*
 *  Move up both motors
 */
@@ -250,7 +260,7 @@ void SerialComTlt::stop(){
 }
 
 /*
-Get Commands: 
+Get Commands:
  - pose: current tick position
  - speed: current speed as percentage
  - status: initialized, retracting, extending
@@ -274,20 +284,20 @@ void SerialComTlt::getPercentSpeedM2(){
 void SerialComTlt::getStatusM1(){
     sendCmd("RG",GET_STATUS_M1);
     if (debug_){
-        cout << "SerialComTlt::getStatusM1: ";
-        cout << "Initialized=" << mot1_initialized_;
-        cout << "Retracting=" << mot1_retracting_;
-        cout << "Extending=" << mot1_extending_;
+        cout << "SerialComTlt::getStatusM1:";
+        cout << " Initialized=" << mot1_initialized_;
+        cout << " Retracting=" << mot1_retracting_;
+        cout << " Extending=" << mot1_extending_;
         cout << endl;
     }
 }
 void SerialComTlt::getStatusM2(){
     sendCmd("RG",GET_STATUS_M2);
     if (debug_){
-        cout << "SerialComTlt::getStatusM2: ";
-        cout << "Initialized=" << mot2_initialized_;
-        cout << "Retracting=" << mot2_retracting_;
-        cout << "Extending=" << mot2_extending_;
+        cout << "SerialComTlt::getStatusM2:";
+        cout << " Initialized=" << mot2_initialized_;
+        cout << " Retracting=" << mot2_retracting_;
+        cout << " Extending=" << mot2_extending_;
         cout << endl;
     }
 }
@@ -295,7 +305,7 @@ void SerialComTlt::getStatusM2(){
 Set Commands
  - pose: target tick position
  - speed: target speed as percentage
- - 
+ -
 */
 void SerialComTlt::setPoseM1(unsigned int pose){
     std::vector<unsigned char> params;
@@ -336,36 +346,43 @@ void SerialComTlt::setPercentSpeedM2(unsigned int percent){
     sendCmd("RT",params);
 }
 
-/*
-Move Commands
- - down: retract until stopped
- - up: extend until stopped
- - pose: extract or extend to match set pose
-*/
+//Move Commands
+// - down: retract until stopped
+// - up: extend until stopped
+// - pose: extract or extend to match set pose
+/*Serial command to retract motor 1*/
 void SerialComTlt::moveM1Down(){
     sendCmd("RE",MOVE_M1_DOWN);
 }
+/*Serial command to extend motor 1*/
 void SerialComTlt::moveM1Up(){
     sendCmd("RE",MOVE_M1_UP);
 }
+/*Serial command to move motor 1 to previously set user pose*/
 void SerialComTlt::moveM1Pose(){
     sendCmd("RE",MOVE_M1_POSE);
 }
+/*Serial command to retract motor 2*/
 void SerialComTlt::moveM2Down(){
     sendCmd("RE",MOVE_M2_DOWN);
 }
+/*Serial command to extend motor 2*/
 void SerialComTlt::moveM2Up(){
     sendCmd("RE",MOVE_M2_UP);
 }
+/*Serial command to move motor 1 to previously set user pose*/
 void SerialComTlt::moveM2Pose(){
     sendCmd("RE",MOVE_M2_POSE);
 }
+/*Serial command to retract all motors*/
 void SerialComTlt::moveAllDown(){
     sendCmd("RE",MOVE_ALL_DOWN);
 }
+/*Serial command to extend all motors*/
 void SerialComTlt::moveAllUp(){
     sendCmd("RE",MOVE_ALL_UP);
 }
+/*Serial command to move all motors to previously set user pose*/
 void SerialComTlt::moveAllPose(){
     sendCmd("RE",MOVE_ALL_POSE);
 }
@@ -478,12 +495,13 @@ bool SerialComTlt::checkResponseAck(vector<unsigned char> *response){
     return false;
 }
 
-vector<unsigned char> SerialComTlt::feedback(){
+vector<unsigned char> SerialComTlt::feedback(vector<unsigned char> sent_data){
     int i = 0;
     int timeout =0;
     vector<unsigned char> received_data;
     string last_data;
     string command_type="";
+    string sent_command_type({static_cast<char>(sent_data[1]), '\0'});
     int msg_size = -1;
     bool success = false;
     bool first_byte = false;
@@ -501,7 +519,7 @@ vector<unsigned char> SerialComTlt::feedback(){
                     received_data.push_back(int(item));  // convert cmd string in hex value
                 }
             }
-            if( first_byte){
+            if(first_byte){
                 i++;
                 if(i>1) {
                     for (const auto &item : last_data) {
@@ -512,14 +530,16 @@ vector<unsigned char> SerialComTlt::feedback(){
                 // command detector
                 if(i==2){
                     command_type = last_data;
-                    if (debug_) cout << "Response Command type : R"<< command_type << endl;
+                    if (debug_) cout << "SerialComTlt::feedback::ResponseCommand: R"<< command_type << endl;
+                    if(command_type[0] != sent_command_type[0]){
+                       cout << "SerialComTlt::feedback::Error: Response command type: " << command_type << " does not match sent command: " << sent_command_type << endl;
+                    }
                 }
 
                 // success detector
                 if( i==3 && last_data==""){ // ACK
                     success = true;
                 }
-
 
                 if(command_type =="G")  {
                     if (i == 4 && success) {
@@ -564,8 +584,8 @@ Extract:
  - speed
  - status
 */
-bool SerialComTlt::extractPose(vector<unsigned char>* response, int mot){
-    int position = (unsigned char)(*(response->end()-5)) << 8 | (unsigned char)(*(response->end() - 6));
+bool SerialComTlt::extractPose(vector<unsigned char> response, int mot){
+    unsigned int position = response[6] << 8 | response[5];
 
     if(mot == 1) mot1_pose_ = position;
     else if(mot == 2) mot2_pose_ = position;
@@ -573,27 +593,27 @@ bool SerialComTlt::extractPose(vector<unsigned char>* response, int mot){
 
     return true;
 }
-bool SerialComTlt::extractPercentSpeed(vector<unsigned char>* response, int mot){
-    int speed = (unsigned char)(*(response->end()-5)) << 8 | (unsigned char)(*(response->end() - 6));
-    
+bool SerialComTlt::extractPercentSpeed(vector<unsigned char> response, int mot){
+    unsigned int speed = response[6] << 8 | response[5];
+
     if(mot == 1) mot1_percent_speed_ = speed;
     else if(mot == 2) mot2_percent_speed_ = speed;
     else return false;
-    
+
     return true;
 }
-bool SerialComTlt::extractStatus(vector<unsigned char>* response, int mot){
-    unsigned char status = *(response->end()-6);
+bool SerialComTlt::extractStatus(vector<unsigned char> response, int mot){
+    unsigned char status = response[5];
 
     if(mot == 1){
-        mot1_initialized_ = bool(status | 0x01);
-        mot1_retracting_ = bool(status | 0x02);
-        mot1_extending_ = bool(status | 0x04);
+        mot1_initialized_ = static_cast<bool>(status & 0x01);
+        mot1_retracting_ = static_cast<bool>(status & 0x02);
+        mot1_extending_ = static_cast<bool>(status & 0x04);
     }
     else if(mot == 2){
-        mot2_initialized_ = bool(status | 0x01);
-        mot2_retracting_ = bool(status | 0x02);
-        mot2_extending_ = bool(status | 0x04);
+        mot2_initialized_ = static_cast<bool>(status & 0x01);
+        mot2_retracting_ = static_cast<bool>(status & 0x02);
+        mot2_extending_ = static_cast<bool>(status & 0x04);
     }
     else{
         return false;
@@ -616,15 +636,16 @@ Send Command:
  - convert command to bytes
  - compute checksum
  - write to serial com
- - extract results 
+ - extract results
 */
 bool SerialComTlt::sendCmd(string cmd, vector<unsigned char> param){
     // Lock
     lock_.lock();
+    if(debug_) cout << endl << "--------------------" << "sendCmd::Begin" << "--------------------" << endl;
 
     // Convert String Command to Hex
     vector<unsigned char> final_cmd;
-    if (debug_) cout <<"----------------------"<< endl << "Input Cmd:  ";
+    if (debug_) cout << "SerialComTlt::sendCmd::InputCommand: ";
     for (const auto &item : cmd) {
         if (debug_) cout << item;
         final_cmd.push_back(int(item));  // convert cmd string in hex value
@@ -639,7 +660,7 @@ bool SerialComTlt::sendCmd(string cmd, vector<unsigned char> param){
         }
     }
     if (debug_) cout <<" ]"<< endl;
-    
+
     // Compute checksum
     unsigned short checksum = calculateChecksum(&final_cmd);
     unsigned short lsb = checksum &0x00FF;
@@ -653,7 +674,7 @@ bool SerialComTlt::sendCmd(string cmd, vector<unsigned char> param){
         for (unsigned short j: final_cmd){
             final_cmd_hex <<  hex << j << ' ';
         }
-        cout << "SerialComTlt::sendCmd - Output Cmd: " << final_cmd_hex.str()<< endl;
+        cout << "SerialComTlt::sendCmd::OutputCommand: " << final_cmd_hex.str()<< endl;
     }
 
     // Send Command
@@ -671,9 +692,9 @@ bool SerialComTlt::sendCmd(string cmd, vector<unsigned char> param){
     usleep(10); // wait for response
 
     // Receive Response
-    vector<unsigned char> output = feedback();
+    vector<unsigned char> output = feedback(final_cmd);
      if(output.size() == 0){
-        cout << "SerialComTlt::sendCmd - Response empty" << endl;
+        cout << "SerialComTlt::sendCmd::Response: empty" << endl;
         lock_.unlock();
         return false;
     }
@@ -682,26 +703,26 @@ bool SerialComTlt::sendCmd(string cmd, vector<unsigned char> param){
         for (unsigned short j: output){
             output_hex <<  hex << j << ' ';
         }
-        cout << "SerialComTlt::sendCmd - Response: " << output_hex.str()<< endl;
+        cout << "SerialComTlt::sendCmd::Response: " << output_hex.str()<< endl;
     }
 
     // Checksum Failed, Try Again
     if(!checkResponseChecksum(&output) || !checkResponseAck(&output)){
-        cout << "SerialComTlt::sendCmd - Cmd failed, retrying..." << endl;
+        cout << "SerialComTlt::sendCmd::Failed: retrying..." << endl;
         serial_tlt_.flush();
         usleep(300);
         serial_tlt_.write(final_cmd);
 
-        output = feedback();
+        output = feedback(final_cmd);
         if (debug_){
             stringstream output_hex;
             for (unsigned short j: output){
                 output_hex <<  hex << j << ' ';
             }
-            cout << "SerialComTlt::sendCmd - Response: " << output_hex.str()<< endl;
+            cout << "SerialComTlt::sendCmd::Response: " << output_hex.str()<< endl;
         }
         if(output.size() == 0 || !checkResponseChecksum(&output) || !checkResponseAck(&output)){
-            cout << "SerialComTlt::sendCmd - Command FAILED !!!" << endl;
+            cout << "SerialComTlt::sendCmd::Failed: AGAIN!" << endl;
             lock_.unlock();
             startRs232Com();
             return false;
@@ -711,16 +732,16 @@ bool SerialComTlt::sendCmd(string cmd, vector<unsigned char> param){
     // Extract Information
     if(cmd =="RG"){
         // get pose
-        if(param == GET_POSE_M1) extractPose(&output,1);
-        else if (param == GET_POSE_M2) extractPose(&output,2);
+        if(param == GET_POSE_M1) extractPose(output,1);
+        else if (param == GET_POSE_M2) extractPose(output,2);
         // get speed
-        else if (param == GET_SPEED_M1) extractPercentSpeed(&output,1);
-        else if (param == GET_SPEED_M2) extractPercentSpeed(&output,2);
+        else if (param == GET_SPEED_M1) extractPercentSpeed(output,1);
+        else if (param == GET_SPEED_M2) extractPercentSpeed(output,2);
         // get status
-        else if (param == GET_STATUS_M1) extractPercentSpeed(&output,1);
-        else if (param == GET_STATUS_M2) extractPercentSpeed(&output,2);
+        else if (param == GET_STATUS_M1) extractStatus(output,1);
+        else if (param == GET_STATUS_M2) extractStatus(output,2);
     }
-    if (debug_) cout <<"----------------------" << endl;
+    if(debug_) cout << "--------------------" << "sendCmd::End" << "--------------------" << endl << endl;
 
     // Unlock
     lock_.unlock();
@@ -729,6 +750,20 @@ bool SerialComTlt::sendCmd(string cmd, vector<unsigned char> param){
 
 SerialComTlt::State SerialComTlt::initState(){
     return SerialComTlt::State::INIT;
+}
+
+SerialComTlt::State SerialComTlt::calibState(){
+    if(!calibrating_){
+        calibrating_ = true;
+    }
+    // Move all the way down
+    if(motion_down_){
+        // check if reached bottom
+        if ()
+    }
+    // Move up while recording speed
+    // Move down while recording speed
+    return SerialComTlt::State::CALIB;
 }
 
 SerialComTlt::State SerialComTlt::idleState(){

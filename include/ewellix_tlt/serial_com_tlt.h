@@ -47,6 +47,7 @@ class SerialComTlt
     public:
         enum State {
             INIT,
+            CALIB,
             IDLE,
             MOTION,
             COMPLETE,
@@ -94,7 +95,7 @@ class SerialComTlt
         serial::Serial serial_tlt_;
         bool debug_;
         bool stop_loop_;
-        bool com_started_;
+        bool com_started_; // req
         //int mot1_pose_;JTA_SERVER_H
         //int mot2_pose_;
         float last_target_;
@@ -106,7 +107,7 @@ class SerialComTlt
 
         vector<unsigned char> intToBytes(unsigned int paramInt);
         bool sendCmd(string, vector<unsigned char>);
-        vector<unsigned char> feedback ();
+        vector<unsigned char> feedback(vector<unsigned char>);
         unsigned short calculateChecksum (vector<unsigned char>*);
         bool checkResponseChecksum(vector<unsigned char>*);
         bool checkResponseAck(vector<unsigned char>*);
@@ -114,20 +115,21 @@ class SerialComTlt
         // Motors control with pose
         void moveMotAll(int, int);
 
+
         /*
-        Motor Encoder Pose: 
+        Motor Encoder Pose:
          - in encoder ticks.
          - range: 10 - 850 ticks
         */
         // Variables
-        int mot1_pose_;
-        int mot2_pose_;
-        int mot1_pose_target_;
-        int mot2_pose_target_;
+        unsigned int mot1_pose_;
+        unsigned int mot2_pose_;
+        unsigned int mot1_pose_target_;
+        unsigned int mot2_pose_target_;
         // Commands: Get Pose (RG)
         const std::vector<unsigned char> GET_POSE_M1 = {0x11, 0x00};
         const std::vector<unsigned char> GET_POSE_M2 = {0x12, 0x00};
-        bool extractPose(vector<unsigned char>*, int);
+        bool extractPose(vector<unsigned char>, int);
         void getPoseM1();
         void getPoseM2();
         // Commands: Set Pose (RT)
@@ -135,6 +137,10 @@ class SerialComTlt
         const std::vector<unsigned char> SET_POSE_M2 = {0x06, 0x00, 0x22, 0x30};
         void setPoseM1(unsigned int pose);
         void setPoseM2(unsigned int pose);
+        // Checks
+        bool isRetracted();
+        bool isExtended();
+
 
         /*
         Motor Percentage Speed
@@ -142,12 +148,12 @@ class SerialComTlt
          - range: 0 - 100 percent
         */
         // Variables
-        int mot1_percent_speed_;
-        int mot2_percent_speed_;
+        unsigned int mot1_percent_speed_;
+        unsigned int mot2_percent_speed_;
         // Commands: Get Speed (RG)
         const std::vector<unsigned char> GET_SPEED_M1 = {0xF1, 0X00};
         const std::vector<unsigned char> GET_SPEED_M2 = {0xF2, 0X00};
-        bool extractPercentSpeed(vector<unsigned char>*, int);
+        bool extractPercentSpeed(vector<unsigned char>, int);
         void getPercentSpeedM1();
         void getPercentSpeedM2();
         // Commands: Set Speed (RT)
@@ -173,7 +179,7 @@ class SerialComTlt
         // Commands: Get Status (RG)
         const std::vector<unsigned char> GET_STATUS_M1 = {0xE1, 0X00};
         const std::vector<unsigned char> GET_STATUS_M2 = {0xE2, 0X00};
-        bool extractStatus(vector<unsigned char>*, int);
+        bool extractStatus(vector<unsigned char>, int);
         void getStatusM1();
         void getStatusM2();
 
@@ -187,7 +193,7 @@ class SerialComTlt
         void moveM1Down();
         void moveM1Pose();
         void moveM1Up();
-        
+
         const std::vector<unsigned char> MOVE_M2_DOWN = {0x01, 0x01, 0xff};
         const std::vector<unsigned char> MOVE_M2_POSE = {0x01, 0x09, 0xff};
         const std::vector<unsigned char> MOVE_M2_UP = {0x01, 0x02, 0xff};
@@ -201,7 +207,7 @@ class SerialComTlt
         void moveAllDown();
         void moveAllPose();
         void moveAllUp();
-    
+
         // Commands: Stop Motors (RS)
         const std::vector<unsigned char> STOP_M1_FAST = {0x00, 0x00};
         const std::vector<unsigned char> STOP_M1_SLOW = {0x00, 0x01};
