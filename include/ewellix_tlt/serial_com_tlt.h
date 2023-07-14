@@ -21,6 +21,8 @@
 
 using namespace std;
 
+const int TICK_ERROR_MARGIN = 2;
+
 const int MOTOR1_TICKS = 850;
 const int MOTOR1_TICK_OFFSET = 10;
 const float MOTOR1_METERS = 0.265;
@@ -45,15 +47,6 @@ Class representing Serial communication with the TLT Columns
 class SerialComTlt
 {
     public:
-        enum State {
-            INIT,
-            CALIB,
-            IDLE,
-            MOTION,
-            COMPLETE,
-            FAILURE,
-        };
-
         SerialComTlt();
         ~SerialComTlt();
 
@@ -67,8 +60,6 @@ class SerialComTlt
         void moveUp();
         void moveDown();
         void stop();
-        void setColumnSize(float m);
-        float getColumnSize();
 
         void comLoop();
 
@@ -83,10 +74,40 @@ class SerialComTlt
 
         int margin_ = 1;
 
+        // High Level Commands
+        void set_position(float position);
+        float get_position();
+
+        // States
+        enum class State {
+            INIT,
+            CALIB,
+            IDLE,
+            MOTION,
+            COMPLETE,
+            FAILURE,
+        };
         State state_;
         State next_state_;
         State initState();
         State idleState();
+
+        // Calibration State
+        enum class CalibSubState {
+            INIT,
+            RETRACT,
+            EXTEND_LOWER,
+            EXTEND_UPPER,
+            RETRACT_UPPER,
+            RETRACT_LOWER,
+        };
+        unsigned int calib_start_ticks_;
+        unsigned int calib_end_ticks_;
+        chrono::steady_clock::time_point calib_start_time_;
+        chrono::steady_clock::time_point calib_end_time_;
+        CalibSubState calib_sub_state_;
+        CalibSubState next_calib_sub_state_;
+        State calibState();
         State motionState();
         State failureState();
 
@@ -99,7 +120,6 @@ class SerialComTlt
         //int mot1_pose_;JTA_SERVER_H
         //int mot2_pose_;
         float last_target_;
-        int mot_ticks_;
         bool process_target_;
         bool manual_target_;
         mutex lock_;
@@ -122,10 +142,10 @@ class SerialComTlt
          - range: 10 - 850 ticks
         */
         // Variables
-        unsigned int mot1_pose_;
-        unsigned int mot2_pose_;
-        unsigned int mot1_pose_target_;
-        unsigned int mot2_pose_target_;
+        unsigned int mot1_ticks_;
+        unsigned int mot2_ticks_;
+        unsigned int mot1_ticks_goal_;
+        unsigned int mot2_ticks_goal_;
         // Commands: Get Pose (RG)
         const std::vector<unsigned char> GET_POSE_M1 = {0x11, 0x00};
         const std::vector<unsigned char> GET_POSE_M2 = {0x12, 0x00};
@@ -151,8 +171,10 @@ class SerialComTlt
         unsigned int mot1_percent_speed_;
         unsigned int mot2_percent_speed_;
         // Commands: Get Speed (RG)
-        const std::vector<unsigned char> GET_SPEED_M1 = {0xF1, 0X00};
-        const std::vector<unsigned char> GET_SPEED_M2 = {0xF2, 0X00};
+        const std::vector<unsigned char> GET_SPEED_M1 = {0x11, 0X30};
+        const std::vector<unsigned char> GET_SPEED_M2 = {0x12, 0X30};
+        // const std::vector<unsigned char> GET_SPEED_M1 = {0xF1, 0X00};
+        // const std::vector<unsigned char> GET_SPEED_M2 = {0xF2, 0X00};
         bool extractPercentSpeed(vector<unsigned char>, int);
         void getPercentSpeedM1();
         void getPercentSpeedM2();

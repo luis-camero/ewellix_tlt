@@ -3,16 +3,15 @@
 
 SerialComTlt::SerialComTlt(){
     run_ = true;
-    debug_ = false;
+    debug_ = true;
     go_up_ = false;
     go_down_ = false;
     stop_loop_ = false;
     com_started_ = false;
     process_target_ = false;
     manual_target_ = false;
-    mot1_pose_ = 0;
-    mot2_pose_ = 0;
-    mot_ticks_ = 0;
+    mot1_ticks_ = 0;
+    mot2_ticks_ = 0;
 
     last_target_ = 0.0;
     current_pose_ = 0.0;
@@ -133,7 +132,7 @@ void SerialComTlt::moveMotAll(int mot1_pose, int mot2_pose){
 * Move Mot1 with input pose (ntick)
 */
 void SerialComTlt::moveMot1(int pose){
-    mot1_pose_target_ = pose;
+    mot1_ticks_goal_ = pose;
 
     vector<unsigned char> pose_hex = intToBytes(pose);
     unsigned char a = *(pose_hex.end()-4);
@@ -159,7 +158,7 @@ void SerialComTlt::moveMot1(int pose){
 * Move Mot2 with input pose (ntick)
 */
 void SerialComTlt::moveMot2(int pose){
-    mot2_pose_target_ = pose;
+    mot2_ticks_goal_ = pose;
 
     vector<unsigned char> pose_hex = intToBytes(pose);
     unsigned char a = *(pose_hex.end()-4);
@@ -181,40 +180,35 @@ void SerialComTlt::moveMot2(int pose){
 /*
 * Control column size
 */
-void SerialComTlt::setColumnSize(float m){
-    // Check Target is in Bounds
-    if(m > ALL_MOTOR_METERS) m = ALL_MOTOR_METERS;
-    if(m < 0) m = 0;
+// void SerialComTlt::setColumnSize(float m){
+//     // Check Target is in Bounds
+//     if(m > ALL_MOTOR_METERS) m = ALL_MOTOR_METERS;
+//     if(m < 0) m = 0;
 
-    // Check if Target is Current
-    if(getColumnSize() == m){
-      return;
-    }
+//     // Check if Target is Current
+//     if(getColumnSize() == m){
+//       return;
+//     }
 
-    // Convert Meters to Ticks
-    float mot1_meters = MOTOR1_METER_RATIO * m;
-    float mot2_meters = MOTOR2_METER_RATIO * m;
+//     // Convert Meters to Ticks
+//     float mot1_meters = MOTOR1_METER_RATIO * m;
+//     float mot2_meters = MOTOR2_METER_RATIO * m;
 
-    int mot1_ticks = static_cast<int>(mot1_meters * MOTOR1_METERS_TO_TICKS);
-    int mot2_ticks = static_cast<int>(mot2_meters * MOTOR2_METERS_TO_TICKS);
+//     int mot1_ticks = static_cast<int>(mot1_meters * MOTOR1_METERS_TO_TICKS);
+//     int mot2_ticks = static_cast<int>(mot2_meters * MOTOR2_METERS_TO_TICKS);
 
-    if(mot1_ticks > MOTOR1_TICKS) mot1_ticks = MOTOR1_TICKS;
-    if(mot2_ticks > MOTOR2_TICKS) mot2_ticks = MOTOR2_TICKS;
+//     if(mot1_ticks > MOTOR1_TICKS) mot1_ticks = MOTOR1_TICKS;
+//     if(mot2_ticks > MOTOR2_TICKS) mot2_ticks = MOTOR2_TICKS;
 
-    cout << "SerialComTlt:setColumnSize - ";
-    cout << "size: " << m << " ";
-    cout << "mot1_ticks: " << mot1_ticks << " ";
-    cout << "mot2_ticks: " << mot2_ticks << " ";
-    cout << endl;
-    moveMotAll(mot1_ticks + MOTOR1_TICK_OFFSET, mot2_ticks + MOTOR2_TICK_OFFSET);
-}
+//     cout << "SerialComTlt:setColumnSize - ";
+//     cout << "size: " << m << " ";
+//     cout << "mot1_ticks: " << mot1_ticks << " ";
+//     cout << "mot2_ticks: " << mot2_ticks << " ";
+//     cout << endl;
+//     moveMotAll(mot1_ticks + MOTOR1_TICK_OFFSET, mot2_ticks + MOTOR2_TICK_OFFSET);
+// }
 
-// Macro Functions
-// - high level functions that read from global variables
-/*Check if motors full retracted*/
-bool SerialComTlt::isRetracted(){
 
-}
 
 
 // Composite Commands
@@ -267,11 +261,11 @@ Get Commands:
 */
 void SerialComTlt::getPoseM1(){
     sendCmd("RG",GET_POSE_M1);
-    if (debug_) cout << "SerialComTlt::getPoseM1: " << mot1_pose_ << endl;
+    if (debug_) cout << "SerialComTlt::getPoseM1: " << mot1_ticks_ << endl;
 }
 void SerialComTlt::getPoseM2(){
     sendCmd("RG",GET_POSE_M2);
-    if (debug_) cout << "SerialComTlt::getPoseM2: " << mot2_pose_ << endl;
+    if (debug_) cout << "SerialComTlt::getPoseM2: " << mot2_ticks_ << endl;
 }
 void SerialComTlt::getPercentSpeedM1(){
     sendCmd("RG",GET_SPEED_M1);
@@ -403,23 +397,6 @@ void SerialComTlt::stopAll(){
     if (debug_)cout << "SerialComTlt::stopMotAll" << endl;
 }
 
-float SerialComTlt::getColumnSize(){
-    getPoseM1();
-    getPoseM2();
-
-    int mot1_norm_pose = mot1_pose_ - MOTOR1_TICK_OFFSET;
-    if(mot1_norm_pose < 0) mot1_norm_pose = 0;
-
-    int mot2_norm_pose = mot2_pose_ - MOTOR2_TICK_OFFSET;
-    if(mot2_norm_pose < 0) mot2_norm_pose = 0;
-
-    float mot1_meters = static_cast<float>(mot1_norm_pose * MOTOR1_TICKS_TO_METERS);
-    float mot2_meters = static_cast<float>(mot2_norm_pose * MOTOR2_TICKS_TO_METERS);
-
-    current_pose_ = mot1_meters + mot2_meters;
-    return current_pose_;
-}
-
 /*
 Feedback and Checksum
 */
@@ -510,7 +487,6 @@ vector<unsigned char> SerialComTlt::feedback(vector<unsigned char> sent_data){
     {
         // Check if serial available
         if (serial_tlt_.available()){
-
             last_data = serial_tlt_.read();
 
             if(!first_byte && last_data =="R"){  // Beginning of the message
@@ -566,7 +542,7 @@ vector<unsigned char> SerialComTlt::feedback(vector<unsigned char> sent_data){
             }
         }
         else{
-            usleep(1);
+            usleep(10);
             timeout++;
             if( timeout > 5000){
                 stop_loop_ = true;
@@ -587,8 +563,8 @@ Extract:
 bool SerialComTlt::extractPose(vector<unsigned char> response, int mot){
     unsigned int position = response[6] << 8 | response[5];
 
-    if(mot == 1) mot1_pose_ = position;
-    else if(mot == 2) mot2_pose_ = position;
+    if(mot == 1) mot1_ticks_ = position;
+    else if(mot == 2) mot2_ticks_ = position;
     else return false;
 
     return true;
@@ -748,19 +724,75 @@ bool SerialComTlt::sendCmd(string cmd, vector<unsigned char> param){
     return true;
 }
 
+// Macro Functions
+// - high level functions that read from global variables
+/*Get current lift position in meters*/
+float SerialComTlt::get_position(){
+    int mot1_norm_pose = mot1_ticks_ - MOTOR1_TICK_OFFSET;
+    if(mot1_norm_pose < 0) mot1_norm_pose = 0;
+
+    int mot2_norm_pose = mot2_ticks_ - MOTOR2_TICK_OFFSET;
+    if(mot2_norm_pose < 0) mot2_norm_pose = 0;
+
+    float mot1_meters = static_cast<float>(mot1_norm_pose * MOTOR1_TICKS_TO_METERS);
+    float mot2_meters = static_cast<float>(mot2_norm_pose * MOTOR2_TICKS_TO_METERS);
+
+    return mot1_meters + mot2_meters;
+}
+/*Set goal lift position in meters*/
+void SerialComTlt::set_position(float position){
+    // check bounds
+    if(position > ALL_MOTOR_METERS) position = ALL_MOTOR_METERS;
+    if(position < 0) position = 0;
+    // convert position to ticks
+    float mot1_meters = MOTOR1_METER_RATIO * position;
+    float mot2_meters = MOTOR2_METER_RATIO * position;
+
+    int mot1_ticks = static_cast<int>(mot1_meters * MOTOR1_METERS_TO_TICKS);
+    int mot2_ticks = static_cast<int>(mot2_meters * MOTOR2_METERS_TO_TICKS);
+
+    if(mot1_ticks > MOTOR1_TICKS) mot1_ticks = MOTOR1_TICKS;
+    if(mot2_ticks > MOTOR2_TICKS) mot2_ticks = MOTOR2_TICKS;
+
+    mot1_ticks_goal_ = mot1_ticks + MOTOR1_TICK_OFFSET;
+    mot2_ticks_goal_ = mot2_ticks + MOTOR2_TICK_OFFSET;
+}
+/*Check if motors full retracted*/
+bool SerialComTlt::isRetracted(){
+    bool mot1_retracted = (
+        mot1_ticks_ >= (MOTOR1_TICK_OFFSET - TICK_ERROR_MARGIN)) && (
+        mot1_ticks_ <= (MOTOR1_TICK_OFFSET + TICK_ERROR_MARGIN));
+    bool mot2_retracted = (
+        mot2_ticks_ >= (MOTOR2_TICK_OFFSET - TICK_ERROR_MARGIN)) && (
+        mot2_ticks_ <= (MOTOR2_TICK_OFFSET + TICK_ERROR_MARGIN));
+    return mot1_retracted && mot2_retracted;
+}
+
 SerialComTlt::State SerialComTlt::initState(){
     return SerialComTlt::State::INIT;
 }
 
 SerialComTlt::State SerialComTlt::calibState(){
-    if(!calibrating_){
-        calibrating_ = true;
+    switch(calib_sub_state_)
+    {
+        case SerialComTlt::CalibSubState::INIT:
+            // Prepare to Retract Lift
+            next_calib_sub_state_ = SerialComTlt::CalibSubState::RETRACT;
+            break;
+        case SerialComTlt::CalibSubState::RETRACT:
+            break;
+        case SerialComTlt::CalibSubState::EXTEND_LOWER:
+            break;
+        case SerialComTlt::CalibSubState::EXTEND_UPPER:
+            break;
+        case SerialComTlt::CalibSubState::RETRACT_UPPER:
+            break;
+        case SerialComTlt::CalibSubState::RETRACT_LOWER:
+            break;
     }
-    // Move all the way down
-    if(motion_down_){
+
+    // Wait until moved all the way down
         // check if reached bottom
-        if ()
-    }
     // Move up while recording speed
     // Move down while recording speed
     return SerialComTlt::State::CALIB;
@@ -797,6 +829,11 @@ void SerialComTlt::comLoop(){
             getStatusM1();
             getStatusM2();
 
+            setPoseM1(850);
+            setPoseM2(850);
+            setPercentSpeedM1(100);
+            setPercentSpeedM2(100);
+
             // State Machine
             switch(state_)
             {
@@ -828,16 +865,16 @@ void SerialComTlt::comLoop(){
             // cout << "SerialComTtl::comLoop - start processing target" << endl;
             //     }
 
-            //     if(process_target_ && (mot1_pose_ ==  mot_ticks_)){
+            //     if(process_target_ && (mot1_ticks_ ==  mot_ticks_)){
             //     stop();
             // cout << "SerialComTlt::comLoop - stop processing target" << endl;
             //         process_target_= false;
             //     }
 
-            // if(((mot1_pose_target_ + margin_) >= mot1_pose_) && ((mot1_pose_target_ - margin_) <= mot1_pose_)){
+            // if(((mot1_ticks_goal_ + margin_) >= mot1_ticks_) && ((mot1_ticks_goal_ - margin_) <= mot1_ticks_)){
             //     stopM1();
             // }
-            // if(((mot2_pose_target_ + margin_) >= mot2_pose_) && ((mot2_pose_target_ - margin_) <= mot2_pose_)){
+            // if(((mot2_ticks_goal_ + margin_) >= mot2_ticks_) && ((mot2_ticks_goal_ - margin_) <= mot2_ticks_)){
             //     stopM2();
             // }
 
