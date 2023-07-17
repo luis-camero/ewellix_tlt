@@ -40,7 +40,7 @@ catkin_package(
 ###########
 
 
-include_directories(include 
+include_directories(include
   ${catkin_INCLUDE_DIRS}
 	${Boost_INCLUDE_DIRS}
 )
@@ -59,7 +59,7 @@ add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catk
    serial
    ${catkin_LIBRARIES}
  )
- 
+
 
 #############
 ## Install ##

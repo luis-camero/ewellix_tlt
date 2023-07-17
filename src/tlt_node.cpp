@@ -111,10 +111,13 @@ void TltNode::cbJoy( sensor_msgs::Joy msg){
 
 bool TltNode::srvInitSequence(std_srvs::Trigger::Request &req,
                                 std_srvs::Trigger::Response &res){
-    ROS_INFO("srvInitSequence: Move Up 20 Seconds");
-    srl_.moveUp(20);
-    ROS_INFO("srvInitSequence: Move Down 20 Seconds");
-    srl_.moveDown(20);
+    ROS_INFO("srvInitSequence: beginning calibration.");
+    srl_.calibrate_ = true;
+    sleep(5);
+    while(srl_.state_ == SerialComTlt::State::CALIB){
+        ROS_INFO("still in calibration...");
+        sleep(5);
+    }
     res.success = true;
     res.message = "Moved arm to max and min positions.";
     return true;

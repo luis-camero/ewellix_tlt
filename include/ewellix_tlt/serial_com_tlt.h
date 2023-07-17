@@ -92,23 +92,43 @@ class SerialComTlt
         State initState();
         State idleState();
 
+        // Micro States
+        enum class MicroState {
+            INIT,
+            WAIT,
+            END,
+        };
+        MicroState micro_state_;
+        MicroState next_micro_state_;
+
         // Calibration State
-        enum class CalibSubState {
+        enum class CalibState {
             INIT,
             RETRACT,
             EXTEND_LOWER,
             EXTEND_UPPER,
             RETRACT_UPPER,
             RETRACT_LOWER,
+            EXIT,
         };
+        bool calibrate_;
+        float min_speed_up_;
+        float min_speed_down_;
+        float max_speed_up_;
+        float max_speed_down_;
         unsigned int calib_start_ticks_;
         unsigned int calib_end_ticks_;
         chrono::steady_clock::time_point calib_start_time_;
         chrono::steady_clock::time_point calib_end_time_;
-        CalibSubState calib_sub_state_;
-        CalibSubState next_calib_sub_state_;
+        CalibState calib_state_;
+        CalibState next_calib_state_;
+        bool calibProcedure(unsigned int direction,unsigned int speed,unsigned int m1_goal,unsigned int m2_goal,float* speed_result);
         State calibState();
+
+        // Motion State
         State motionState();
+
+        // Failure State
         State failureState();
 
     private:
@@ -160,7 +180,9 @@ class SerialComTlt
         // Checks
         bool isRetracted();
         bool isExtended();
-
+        bool isAtTicks(unsigned int, unsigned int);
+        bool isAboveTicks(unsigned int, unsigned int);
+        bool isBelowTicks(unsigned int, unsigned int);
 
         /*
         Motor Percentage Speed
@@ -183,7 +205,7 @@ class SerialComTlt
         const std::vector<unsigned char> SET_SPEED_M2 = {0x04, 0x00, 0x12, 0x30};
         void setPercentSpeedM1(unsigned int percent);
         void setPercentSpeedM2(unsigned int percent);
-
+        void setPercentSpeedAll(unsigned int percent);
         /*
         Motor Status
          - three boolean variables

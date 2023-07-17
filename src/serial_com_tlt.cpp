@@ -3,7 +3,7 @@
 
 SerialComTlt::SerialComTlt(){
     run_ = true;
-    debug_ = true;
+    debug_ = false;
     go_up_ = false;
     go_down_ = false;
     stop_loop_ = false;
@@ -16,6 +16,14 @@ SerialComTlt::SerialComTlt(){
     last_target_ = 0.0;
     current_pose_ = 0.0;
     current_target_ = 0.0;
+
+    // States
+    state_ = SerialComTlt::State::INIT;
+    micro_state_ = SerialComTlt::MicroState::INIT;
+    calib_state_ = SerialComTlt::CalibState::INIT;
+
+    // State Commands
+    calibrate_ = false;
 }
 
 
@@ -309,6 +317,7 @@ void SerialComTlt::setPoseM1(unsigned int pose){
     params.insert(params.end(), SET_POSE_M1.begin(), SET_POSE_M1.end());
     params.insert(params.end(), pose_hex.begin(), pose_hex.end());
     sendCmd("RT", params);
+    if(debug_) cout << "setPoseM1: " << mot1_ticks_ << endl;
 }
 void SerialComTlt::setPoseM2(unsigned int pose){
     std::vector<unsigned char> params;
@@ -318,9 +327,10 @@ void SerialComTlt::setPoseM2(unsigned int pose){
     params.insert(params.end(), SET_POSE_M2.begin(), SET_POSE_M2.end());
     params.insert(params.end(), pose_hex.begin(), pose_hex.end());
     sendCmd("RT", params);
+    if(debug_) cout << "setPoseM2: " << mot2_ticks_ << endl;
 }
 void SerialComTlt::setPercentSpeedM1(unsigned int percent){
-    if(percent > 100) percent = 100;
+    //if(percent > 100) percent = 100;
     if(percent < 0) percent = 0;
     std::vector<unsigned char> params;
     std::vector<unsigned char> percent_hex = intToBytes(percent);
@@ -328,9 +338,10 @@ void SerialComTlt::setPercentSpeedM1(unsigned int percent){
     params.insert(params.end(), SET_SPEED_M1.begin(), SET_SPEED_M1.end());
     params.insert(params.end(), percent_hex.begin(), percent_hex.begin() + 2);
     sendCmd("RT",params);
+    if(debug_) cout << "setPercentSpeedM1: " << mot1_percent_speed_ << endl;
 }
 void SerialComTlt::setPercentSpeedM2(unsigned int percent){
-    if(percent > 100) percent = 100;
+    //if(percent > 100) percent = 100;
     if(percent < 0) percent = 0;
     std::vector<unsigned char> params;
     std::vector<unsigned char> percent_hex = intToBytes(percent);
@@ -338,6 +349,11 @@ void SerialComTlt::setPercentSpeedM2(unsigned int percent){
     params.insert(params.end(), SET_SPEED_M2.begin(), SET_SPEED_M2.end());
     params.insert(params.end(), percent_hex.begin(), percent_hex.begin() + 2);
     sendCmd("RT",params);
+    if(debug_) cout << "setPercentSpeedM2: " << mot2_percent_speed_ << endl;
+}
+void SerialComTlt::setPercentSpeedAll(unsigned int percent){
+    setPercentSpeedM1(percent);
+    setPercentSpeedM2(percent);
 }
 
 //Move Commands
@@ -347,38 +363,47 @@ void SerialComTlt::setPercentSpeedM2(unsigned int percent){
 /*Serial command to retract motor 1*/
 void SerialComTlt::moveM1Down(){
     sendCmd("RE",MOVE_M1_DOWN);
+    if(debug_) cout << "moveM1Down" << endl;
 }
 /*Serial command to extend motor 1*/
 void SerialComTlt::moveM1Up(){
     sendCmd("RE",MOVE_M1_UP);
+    if(debug_) cout << "moveM1Up" << endl;
 }
 /*Serial command to move motor 1 to previously set user pose*/
 void SerialComTlt::moveM1Pose(){
     sendCmd("RE",MOVE_M1_POSE);
+    if(debug_) cout << "moveM1Pose" << endl;
 }
 /*Serial command to retract motor 2*/
 void SerialComTlt::moveM2Down(){
     sendCmd("RE",MOVE_M2_DOWN);
+    if(debug_) cout << "moveM2Down" << endl;
 }
 /*Serial command to extend motor 2*/
 void SerialComTlt::moveM2Up(){
     sendCmd("RE",MOVE_M2_UP);
+    if(debug_) cout << "moveM2Up" << endl;
 }
 /*Serial command to move motor 1 to previously set user pose*/
 void SerialComTlt::moveM2Pose(){
     sendCmd("RE",MOVE_M2_POSE);
+    if(debug_) cout << "moveM2Pose" << endl;
 }
 /*Serial command to retract all motors*/
 void SerialComTlt::moveAllDown(){
     sendCmd("RE",MOVE_ALL_DOWN);
+    if(debug_) cout << "moveAllDown" << endl;
 }
 /*Serial command to extend all motors*/
 void SerialComTlt::moveAllUp(){
     sendCmd("RE",MOVE_ALL_UP);
+    if(debug_) cout << "moveAllUp" << endl;
 }
 /*Serial command to move all motors to previously set user pose*/
 void SerialComTlt::moveAllPose(){
     sendCmd("RE",MOVE_ALL_POSE);
+    if(debug_) cout << "moveAllPose" << endl;
 }
 
 /*
@@ -665,7 +690,7 @@ bool SerialComTlt::sendCmd(string cmd, vector<unsigned char> param){
             cout << "SerialComTlt::sendCmd - serial::IOException: " << e.what() << endl;
         }
     }
-    usleep(10); // wait for response
+    //usleep(10); // wait for response
 
     // Receive Response
     vector<unsigned char> output = feedback(final_cmd);
@@ -757,45 +782,148 @@ void SerialComTlt::set_position(float position){
     mot1_ticks_goal_ = mot1_ticks + MOTOR1_TICK_OFFSET;
     mot2_ticks_goal_ = mot2_ticks + MOTOR2_TICK_OFFSET;
 }
+/*Check if motors are at specified ticks*/
+bool SerialComTlt::isAtTicks(unsigned int ticks1, unsigned int ticks2){
+    bool mot1_at_ticks = (
+        mot1_ticks_ >= (ticks1 - TICK_ERROR_MARGIN)) && (
+        mot1_ticks_ <= (ticks1 + TICK_ERROR_MARGIN));
+    bool mot2_at_ticks = (
+        mot2_ticks_ >= (ticks2 - TICK_ERROR_MARGIN)) && (
+        mot2_ticks_ <= (ticks2 + TICK_ERROR_MARGIN));
+    return mot1_at_ticks && mot2_at_ticks;
+}
 /*Check if motors full retracted*/
 bool SerialComTlt::isRetracted(){
-    bool mot1_retracted = (
-        mot1_ticks_ >= (MOTOR1_TICK_OFFSET - TICK_ERROR_MARGIN)) && (
-        mot1_ticks_ <= (MOTOR1_TICK_OFFSET + TICK_ERROR_MARGIN));
-    bool mot2_retracted = (
-        mot2_ticks_ >= (MOTOR2_TICK_OFFSET - TICK_ERROR_MARGIN)) && (
-        mot2_ticks_ <= (MOTOR2_TICK_OFFSET + TICK_ERROR_MARGIN));
-    return mot1_retracted && mot2_retracted;
+    return isAtTicks(MOTOR1_TICK_OFFSET, MOTOR2_TICK_OFFSET);
+}
+/*Check if motors full extended*/
+bool SerialComTlt::isExtended(){
+    return isAtTicks(MOTOR1_TICKS, MOTOR2_TICKS);
+}
+/*Check if above specified ticks*/
+bool SerialComTlt::isBelowTicks(unsigned int ticks1, unsigned int ticks2){
+    bool mot1_below_ticks = mot1_ticks_ <= ticks1;
+    bool mot2_below_ticks = mot2_ticks_ <= ticks2;
+    return mot1_below_ticks && mot2_below_ticks;
+}
+/*Check if below specified ticks*/
+bool SerialComTlt::isAboveTicks(unsigned int ticks1, unsigned int ticks2){
+    bool mot1_above_ticks = mot1_ticks_ >= ticks1;
+    bool mot2_above_ticks = mot2_ticks_ >= ticks2;
+    return mot1_above_ticks && mot2_above_ticks;
 }
 
 SerialComTlt::State SerialComTlt::initState(){
+    if(calibrate_){
+        calibrate_ = false;
+        return SerialComTlt::State::CALIB;
+    }
     return SerialComTlt::State::INIT;
 }
 
-SerialComTlt::State SerialComTlt::calibState(){
-    switch(calib_sub_state_)
-    {
-        case SerialComTlt::CalibSubState::INIT:
-            // Prepare to Retract Lift
-            next_calib_sub_state_ = SerialComTlt::CalibSubState::RETRACT;
+bool SerialComTlt::calibProcedure(unsigned int direction,unsigned int speed,unsigned int m1_goal,unsigned int m2_goal,float* speed_result){
+    m1_goal = static_cast<unsigned int>(std::round(m1_goal));
+    m2_goal = static_cast<unsigned int>(std::round(m2_goal));
+    switch(micro_state_){
+        case SerialComTlt::MicroState::INIT:
+            // Set Speed
+            setPercentSpeedAll(speed);
+            // Start Timer
+            calib_start_time_ = std::chrono::steady_clock::now();
+            // Start Ticks
+            calib_start_ticks_ = mot1_ticks_ + mot2_ticks_;
+            // Start Moving
+            if(direction) moveAllUp();
+            else moveAllDown();
+            // Next State
+            next_micro_state_ = SerialComTlt::MicroState::WAIT;
             break;
-        case SerialComTlt::CalibSubState::RETRACT:
-            break;
-        case SerialComTlt::CalibSubState::EXTEND_LOWER:
-            break;
-        case SerialComTlt::CalibSubState::EXTEND_UPPER:
-            break;
-        case SerialComTlt::CalibSubState::RETRACT_UPPER:
-            break;
-        case SerialComTlt::CalibSubState::RETRACT_LOWER:
+        case SerialComTlt::MicroState::WAIT:
+            // Check
+            if(isAtTicks(m1_goal, m2_goal) ||
+                (direction && isAboveTicks(m1_goal, m2_goal)) ||
+                (!direction && isBelowTicks(m1_goal, m2_goal))){
+                // Stop Moving
+                stopAll();
+                // Stop Timer;
+                calib_end_time_ = std::chrono::steady_clock::now();
+                // End Ticks
+                calib_end_ticks_ = mot1_ticks_ + mot2_ticks_;
+                // Next State
+                next_micro_state_ = SerialComTlt::MicroState::END;
+                break;
+            }
+            else{
+                next_micro_state_ = SerialComTlt::MicroState::WAIT;
+                break;
+            }
+        case SerialComTlt::MicroState::END:
+            // Calculate time elapsed
+            int time_elapsed = std::chrono::duration_cast<std::chrono::seconds>(calib_end_time_ - calib_start_time_).count();
+            // Calculate ticks elapsed
+            int tick_elapsed = calib_end_ticks_ - calib_start_ticks_;
+            // Calculate Speed
+            if(speed_result) *speed_result = std::abs(tick_elapsed/time_elapsed);
+            next_micro_state_ = SerialComTlt::MicroState::INIT;
             break;
     }
+    micro_state_ = next_micro_state_;
+    return micro_state_ == SerialComTlt::MicroState::INIT;
+}
 
-    // Wait until moved all the way down
-        // check if reached bottom
-    // Move up while recording speed
-    // Move down while recording speed
-    return SerialComTlt::State::CALIB;
+SerialComTlt::State SerialComTlt::calibState(){
+    switch(calib_state_)
+    {
+        case SerialComTlt::CalibState::INIT:
+            cout << "calibState::INIT" << endl;
+            next_calib_state_ = SerialComTlt::CalibState::RETRACT;
+            break;
+        case SerialComTlt::CalibState::RETRACT:
+            if(calibProcedure(0, 65535, MOTOR1_TICK_OFFSET, MOTOR2_TICK_OFFSET, nullptr)){
+                next_calib_state_ = SerialComTlt::CalibState::EXTEND_LOWER;
+                cout << "Retracted..." << endl;
+            }
+            else
+                next_calib_state_ = calib_state_;
+            break;
+        case SerialComTlt::CalibState::EXTEND_LOWER:
+            if(calibProcedure(1, 1, MOTOR1_TICKS/2, MOTOR2_TICKS/2, &min_speed_up_)){
+                next_calib_state_ = SerialComTlt::CalibState::EXTEND_UPPER;
+                cout << "Extended lower: min_speed_up: in m/s=" << min_speed_up_*MOTOR1_TICKS_TO_METERS << " at percent speed: " <<  mot1_percent_speed_ << endl;
+            }
+            else
+                next_calib_state_ = calib_state_;
+            break;
+        case SerialComTlt::CalibState::EXTEND_UPPER:
+            if(calibProcedure(1, 65535, MOTOR1_TICKS, MOTOR2_TICKS, &max_speed_up_)){
+                next_calib_state_ = SerialComTlt::CalibState::RETRACT_UPPER;
+                cout << "Extended upper: max_speed_up: in m/s=" << min_speed_up_*MOTOR1_TICKS_TO_METERS << " at percent speed: " <<  mot1_percent_speed_ << endl;
+            }
+            else
+                next_calib_state_ = calib_state_;
+            break;
+        case SerialComTlt::CalibState::RETRACT_UPPER:
+            if(calibProcedure(0, 1, MOTOR1_TICKS/2, MOTOR2_TICKS/2, &min_speed_down_)){
+                next_calib_state_ = SerialComTlt::CalibState::RETRACT_LOWER;
+                cout << "Retract upper: min_speed_down: in m/s=" << min_speed_down_*MOTOR1_TICKS_TO_METERS << " at percent speed: " <<  mot1_percent_speed_ << endl;
+            }
+            else
+                next_calib_state_ = calib_state_;
+            break;
+        case SerialComTlt::CalibState::RETRACT_LOWER:
+            if(calibProcedure(0, 100, MOTOR1_TICK_OFFSET, MOTOR2_TICK_OFFSET, &max_speed_down_)){
+                next_calib_state_ = SerialComTlt::CalibState::INIT;
+                cout << "Retract lower: max_speed_down: in m/s=" << max_speed_down_*MOTOR1_TICKS_TO_METERS << " at percent speed: " <<  mot1_percent_speed_ << endl;
+            }
+            else
+                next_calib_state_ = calib_state_;
+            break;
+    }
+    calib_state_ = next_calib_state_;
+    if(calib_state_ == SerialComTlt::CalibState::INIT)
+        return SerialComTlt::State::IDLE;
+    else
+        return SerialComTlt::State::CALIB;
 }
 
 SerialComTlt::State SerialComTlt::idleState(){
@@ -826,25 +954,27 @@ void SerialComTlt::comLoop(){
             getPoseM2();
             getPercentSpeedM1();
             getPercentSpeedM2();
-            getStatusM1();
-            getStatusM2();
-
-            setPoseM1(850);
-            setPoseM2(850);
-            setPercentSpeedM1(100);
-            setPercentSpeedM2(100);
+            //getStatusM1();
+            //getStatusM2();
 
             // State Machine
             switch(state_)
             {
                 case SerialComTlt::State::INIT:
                     next_state_ = initState();
+                    break;
+                case SerialComTlt::State::CALIB:
+                    next_state_ = calibState();
+                    break;
                 case SerialComTlt::State::IDLE:
                     next_state_ = idleState();
+                    break;
                 case SerialComTlt::State::MOTION:
                     next_state_ = motionState();
+                    break;
                 case SerialComTlt::State::FAILURE:
                     next_state_ = failureState();
+                    break;
             }
             state_ = next_state_;
 
@@ -884,7 +1014,7 @@ void SerialComTlt::comLoop(){
             //     manual_target_= false;
             // }
 
-            usleep(10);
+            //usleep(10);
         }
         usleep(1);
     }
