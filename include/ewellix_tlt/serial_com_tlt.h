@@ -9,6 +9,7 @@
 #include <fstream>
 #include <iostream>
 #include <mutex>
+#include <queue>
 #include <sstream>
 #include <stdio.h>
 #include <stdlib.h>
@@ -50,33 +51,18 @@ class SerialComTlt
         SerialComTlt();
         ~SerialComTlt();
 
+        // Communication Functions
         bool startSerialCom(string port, int baud_rate);
-
         bool startRs232Com();
         bool stopRs232Com();
 
-        void moveUp(int s);
-        void moveDown(int s);
-        void moveUp();
-        void moveDown();
-        void stop();
-
+        // Main Loop
+        bool run_;
         void comLoop();
 
-        bool run_;
-        float current_target_;
-        float current_pose_;
-        bool go_up_;
-        bool go_down_;
-
-        void moveMot1(int);
-        void moveMot2(int);
-
-        int margin_ = 1;
-
         // High Level Commands
-        void set_position(float position);
-        float get_position();
+        void setPosition(float position);
+        float getPosition();
 
         // States
         enum class State {
@@ -86,6 +72,13 @@ class SerialComTlt
             MOTION,
             COMPLETE,
             FAILURE,
+        };
+        const std::vector<string>STATE_NAMES = {
+            "Initialization",
+            "Calibration",
+            "Idle",
+            "InMotion",
+            "Failure"
         };
         State state_;
         State next_state_;
@@ -126,25 +119,47 @@ class SerialComTlt
         State calibState();
 
         // Motion State
+        enum class MotionState {
+            INIT,
+            MOTION_DIRECTED,
+            MOTION_POSE,
+            EXIT,
+        };
+        struct MotionGoal{
+            float mot1_ticks;
+            float mot2_ticks;
+            float speed;
+        };
+        bool motion_stop_;
+        MotionGoal motion_goal_;
+        std::queue<MotionGoal> motion_queue_;
+        int motion_directed_; // -1 down, 1 up
+        chrono::milliseconds motion_duration_;
+        chrono::steady_clock::time_point motion_start_time_;
+        chrono::steady_clock::time_point motion_end_time_;
+        MotionState motion_state_;
+        MotionState next_motion_state_;
+        void motionQueueGoal(unsigned int mot1_ticks, unsigned int mot2_ticks, float speed);
+        void motionQueueTickGoal(unsigned int mot_ticks, unsigned int mot, float speed);
+        void motionQueuePositionGoal(float position, float speed);
+        bool motionPoseProcedure(MotionGoal goal);
+        bool motionDirectedProcedure(int direction, chrono::milliseconds duration);
         State motionState();
 
         // Failure State
         State failureState();
 
     private:
-
-        serial::Serial serial_tlt_;
         bool debug_;
-        bool stop_loop_;
-        bool com_started_; // req
-        //int mot1_pose_;JTA_SERVER_H
-        //int mot2_pose_;
-        float last_target_;
-        bool process_target_;
-        bool manual_target_;
+        /*
+        Serial Communication
+        */
+        // Variables
+        serial::Serial serial_tlt_;
         mutex lock_;
-
-
+        bool stop_loop_;
+        bool com_started_;
+        // Methods
         vector<unsigned char> intToBytes(unsigned int paramInt);
         bool sendCmd(string, vector<unsigned char>);
         vector<unsigned char> feedback(vector<unsigned char>);
@@ -152,9 +167,11 @@ class SerialComTlt
         bool checkResponseChecksum(vector<unsigned char>*);
         bool checkResponseAck(vector<unsigned char>*);
 
-        // Motors control with pose
-        void moveMotAll(int, int);
-
+        /*
+        Utils
+        */
+       void convertPosition2Ticks(float position, unsigned int* mot1_ticks, unsigned int* mot2_ticks);
+       void convertTicks2Position(unsigned int mot1_ticks, unsigned int mot2_ticks, float* position);
 
         /*
         Motor Encoder Pose:
@@ -180,6 +197,8 @@ class SerialComTlt
         // Checks
         bool isRetracted();
         bool isExtended();
+        bool isAtGoal(MotionGoal goal);
+        bool isAtPosition(float position);
         bool isAtTicks(unsigned int, unsigned int);
         bool isAboveTicks(unsigned int, unsigned int);
         bool isBelowTicks(unsigned int, unsigned int);
@@ -206,26 +225,36 @@ class SerialComTlt
         void setPercentSpeedM1(unsigned int percent);
         void setPercentSpeedM2(unsigned int percent);
         void setPercentSpeedAll(unsigned int percent);
+
         /*
         Motor Status
-         - three boolean variables
-         - bit0: initialized
-         - bit1: retracting
-         - bit2: extending
+        - bit0: drive available
+        - bit1: signal "limit_in_out"
+        - bit2: switch 1
+        - bit3: switch 2
+        - bit4: motion active
+        - bit5: position reached
+        - bit6: out position
+        - bit7: stroke done
         */
         // Variables
-        bool mot1_initialized_;
-        bool mot1_retracting_;
-        bool mot1_extending_;
-        bool mot2_initialized_;
-        bool mot2_retracting_;
-        bool mot2_extending_;
+        std::vector<bool> mot1_status_;
+        std::vector<bool> mot2_status_;
         // Commands: Get Status (RG)
-        const std::vector<unsigned char> GET_STATUS_M1 = {0xE1, 0X00};
-        const std::vector<unsigned char> GET_STATUS_M2 = {0xE2, 0X00};
+        const std::vector<unsigned char> GET_STATUS_M1 = {0x71, 0X01}; // Actuator1 Status2: {0xE1, 0X00};
+        const std::vector<unsigned char> GET_STATUS_M2 = {0x72, 0X01}; // Actuator2 Status2: {0xE2, 0X00};
         bool extractStatus(vector<unsigned char>, int);
         void getStatusM1();
         void getStatusM2();
+        bool isDriveAvailableM1();
+        bool isDriveAvailableM2();
+        bool isDriveAvailable();
+        bool isMotionActiveM1();
+        bool isMotionActiveM2();
+        bool isMotionActive();
+        bool isPositionReachedM1();
+        bool isPositionReachedM2();
+        bool isPositionReached();
 
         /*
         Trigger Motor Movement or Stop

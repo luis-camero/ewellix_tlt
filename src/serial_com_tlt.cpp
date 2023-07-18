@@ -1,34 +1,37 @@
 #include "ewellix_tlt/serial_com_tlt.h"
 
-
 SerialComTlt::SerialComTlt(){
+    // Comm Loop Control
     run_ = true;
     debug_ = false;
-    go_up_ = false;
-    go_down_ = false;
     stop_loop_ = false;
     com_started_ = false;
-    process_target_ = false;
-    manual_target_ = false;
-    mot1_ticks_ = 0;
-    mot2_ticks_ = 0;
-
-    last_target_ = 0.0;
-    current_pose_ = 0.0;
-    current_target_ = 0.0;
 
     // States
     state_ = SerialComTlt::State::INIT;
     micro_state_ = SerialComTlt::MicroState::INIT;
     calib_state_ = SerialComTlt::CalibState::INIT;
+    motion_state_ = SerialComTlt::MotionState::INIT;
 
-    // State Commands
+    // Calib State Control
     calibrate_ = false;
+
+    // Motion State Control
+    motion_directed_ = 0;
+    motion_duration_ = chrono::milliseconds(0);
+
+    // Micro Variables
+    mot1_ticks_ = 0;
+    mot2_ticks_ = 0;
+    mot1_status_ = std::vector<bool>(8, false);
+    mot2_status_ = std::vector<bool>(8, false);
+    mot1_percent_speed_ = 0;
+    mot2_percent_speed_ = 0;
 }
 
 
 SerialComTlt::~SerialComTlt(){
-    stop();
+    stopAll();
     com_started_=false;
     stop_loop_ = true;
     run_= false;
@@ -38,8 +41,8 @@ SerialComTlt::~SerialComTlt(){
     }
 }
 
+/*Setup serial socket.*/
 bool SerialComTlt::startSerialCom(string port, int baud_rate){
-
     serial::Timeout timeout = serial::Timeout::simpleTimeout(1000);
 
     serial_tlt_.setPort(port);
@@ -58,9 +61,7 @@ bool SerialComTlt::startSerialCom(string port, int baud_rate){
 
 }
 
-/*
-* Activate the remote function
-*/
+/*Activate the remote function.*/
 bool SerialComTlt::startRs232Com(){
 
     vector<unsigned char> params = {0x01};
@@ -78,9 +79,7 @@ bool SerialComTlt::startRs232Com(){
 
 }
 
-/*
-* Deactivate the remote function
-*/
+/*Deactivate the remote function.*/
 bool SerialComTlt::stopRs232Com(){
     com_started_=false;
     usleep(100);
@@ -95,220 +94,56 @@ bool SerialComTlt::stopRs232Com(){
         return false;
     }
 }
-/*
-* Move both with input pose (ntick)
-*/
-void SerialComTlt::moveMotAll(int mot1_pose, int mot2_pose){
-    vector<unsigned char> params;
-    vector<unsigned char> pose_hex;
-    unsigned char a;
-    unsigned char b;
-    unsigned char c;
-    unsigned char d;
 
-
-    // Motor1
-    pose_hex = intToBytes(mot1_pose);
-    a = *(pose_hex.end()-4);
-    b = *(pose_hex.end()-3);
-    c = *(pose_hex.end()-2);
-    d = *(pose_hex.end()-1);
-
-    params = {0x06,0x00,0x21,0x30,d,c,b,a};
-    sendCmd("RT",params);      // set pose
-    params = {0x04,0x00,0x11,0x30,0x64,0x00};
-    sendCmd("RT",params);      //set speed 100%
-
-    // Motor2
-    pose_hex = intToBytes(mot2_pose);
-    a = *(pose_hex.end()-4);
-    b = *(pose_hex.end()-3);
-    c = *(pose_hex.end()-2);
-    d = *(pose_hex.end()-1);
-
-    params = {0x06,0x00,0x22,0x30,d,c,b,a};
-    sendCmd("RT",params);      // set pose
-    params = {0x04, 0x00,0x12,0x30,0x64,0x00};
-    sendCmd("RT",params);      //set speed 100%
-
-    // Move All Motors
-    params = {0x07,0x09,0xff};
-    sendCmd("RE",params);
-}
-
-/*
-* Move Mot1 with input pose (ntick)
-*/
-void SerialComTlt::moveMot1(int pose){
-    mot1_ticks_goal_ = pose;
-
-    vector<unsigned char> pose_hex = intToBytes(pose);
-    unsigned char a = *(pose_hex.end()-4);
-    unsigned char b = *(pose_hex.end()-3);
-    unsigned char c = *(pose_hex.end()-2);
-    unsigned char d = *(pose_hex.end()-1);
-
-    // P1, P2: 0x06, 0x00: 6 Byte Message
-    // P3, P4: 0x21, 0x30: 3021 : Remote Position A1
-    // P5, P6, P7, P8: Position in Big Endian
-    vector<unsigned char> params = {0x06,0x00,0x21,0x30,d,c,b,a};
-
-    sendCmd("RT",params);      // set pose
-
-    params = {0x04,0x00,0x11,0x30,0x64,0x00};
-    sendCmd("RT",params);      //set speed 100%
-
-    params = {0x00,0x09,0xff};
-    sendCmd("RE",params);      // move
-}
-
-/*
-* Move Mot2 with input pose (ntick)
-*/
-void SerialComTlt::moveMot2(int pose){
-    mot2_ticks_goal_ = pose;
-
-    vector<unsigned char> pose_hex = intToBytes(pose);
-    unsigned char a = *(pose_hex.end()-4);
-    unsigned char b = *(pose_hex.end()-3);
-    unsigned char c = *(pose_hex.end()-2);
-    unsigned char d = *(pose_hex.end()-1);
-
-    vector<unsigned char> params = {0x06, 0x00,0x22,0x30,d,c,b,a};
-
-    sendCmd("RT",params);      // set pose
-    params = {0x04,0x00,0x12,0x30,0x64,0x00};
-    sendCmd("RT",params);      //set speed 100%
-
-    params = {0x01,0x09,0xff};
-    sendCmd("RE",params);      // move
-
-}
-
-/*
-* Control column size
-*/
-// void SerialComTlt::setColumnSize(float m){
-//     // Check Target is in Bounds
-//     if(m > ALL_MOTOR_METERS) m = ALL_MOTOR_METERS;
-//     if(m < 0) m = 0;
-
-//     // Check if Target is Current
-//     if(getColumnSize() == m){
-//       return;
-//     }
-
-//     // Convert Meters to Ticks
-//     float mot1_meters = MOTOR1_METER_RATIO * m;
-//     float mot2_meters = MOTOR2_METER_RATIO * m;
-
-//     int mot1_ticks = static_cast<int>(mot1_meters * MOTOR1_METERS_TO_TICKS);
-//     int mot2_ticks = static_cast<int>(mot2_meters * MOTOR2_METERS_TO_TICKS);
-
-//     if(mot1_ticks > MOTOR1_TICKS) mot1_ticks = MOTOR1_TICKS;
-//     if(mot2_ticks > MOTOR2_TICKS) mot2_ticks = MOTOR2_TICKS;
-
-//     cout << "SerialComTlt:setColumnSize - ";
-//     cout << "size: " << m << " ";
-//     cout << "mot1_ticks: " << mot1_ticks << " ";
-//     cout << "mot2_ticks: " << mot2_ticks << " ";
-//     cout << endl;
-//     moveMotAll(mot1_ticks + MOTOR1_TICK_OFFSET, mot2_ticks + MOTOR2_TICK_OFFSET);
-// }
-
-
-
-
-// Composite Commands
-// - commands that make multiple serial calls
-/*
-*  Move up both motors
-*/
-void SerialComTlt::moveUp(){
-    moveM1Up();
-    moveM2Up();
-}
-
-/*
-*  Move down both motors
-*/
-void SerialComTlt::moveDown(){
-    moveM1Down();
-    moveM2Down();
-
-}
-/*
-*  Move up both motors during n seconds
-*/
-void SerialComTlt::moveUp(int n){
-    moveM1Up();
-    moveM2Up();
-    sleep(n);
-    stop();
-}
-
-/*
-*  Move down both motors during n seconds
-*/
-void SerialComTlt::moveDown(int n){
-    moveM1Down();
-    moveM2Down();
-    sleep(n);
-    stop();
-}
-
-void SerialComTlt::stop(){
-    stopAll();
-}
-
-/*
-Get Commands:
- - pose: current tick position
- - speed: current speed as percentage
- - status: initialized, retracting, extending
-*/
+/*Serial command to get motor 1 encoder pose.*/
 void SerialComTlt::getPoseM1(){
     sendCmd("RG",GET_POSE_M1);
     if (debug_) cout << "SerialComTlt::getPoseM1: " << mot1_ticks_ << endl;
 }
+
+/*Serial command to get motor 2 encoder pose.*/
 void SerialComTlt::getPoseM2(){
     sendCmd("RG",GET_POSE_M2);
     if (debug_) cout << "SerialComTlt::getPoseM2: " << mot2_ticks_ << endl;
 }
+
+/*Serial command to get motor 1 percent speed.*/
 void SerialComTlt::getPercentSpeedM1(){
     sendCmd("RG",GET_SPEED_M1);
     if (debug_) cout << "SerialComTlt::getPercentSpeedM1: " << mot1_percent_speed_ << endl;
 }
+
+/*Serial command to get motor 2 percent speed.*/
 void SerialComTlt::getPercentSpeedM2(){
     sendCmd("RG",GET_SPEED_M2);
     if (debug_) cout << "SerialComTlt::getPercentSpeedM2: " << mot2_percent_speed_ << endl;
 }
+
+/*Serial command to get status of motor 1.*/
 void SerialComTlt::getStatusM1(){
     sendCmd("RG",GET_STATUS_M1);
     if (debug_){
-        cout << "SerialComTlt::getStatusM1:";
-        cout << " Initialized=" << mot1_initialized_;
-        cout << " Retracting=" << mot1_retracting_;
-        cout << " Extending=" << mot1_extending_;
-        cout << endl;
+        cout << "SerialComTlt::getStatusM1: [";
+        for(auto it = mot1_status_.begin(); it != mot1_status_.end(); it++){
+            cout << *it << " ";
+        }
+        cout << "]" << endl;
     }
 }
+
+/*Serial command to get status of motor 2.*/
 void SerialComTlt::getStatusM2(){
     sendCmd("RG",GET_STATUS_M2);
     if (debug_){
-        cout << "SerialComTlt::getStatusM2:";
-        cout << " Initialized=" << mot2_initialized_;
-        cout << " Retracting=" << mot2_retracting_;
-        cout << " Extending=" << mot2_extending_;
-        cout << endl;
+        cout << "SerialComTlt::getStatusM2: [";
+        for(auto it = mot2_status_.begin(); it != mot2_status_.end(); it++){
+            cout << *it << " ";
+        }
+        cout << "]" << endl;
     }
 }
-/*
-Set Commands
- - pose: target tick position
- - speed: target speed as percentage
- -
-*/
+
+/*Serial command to set motor 1 encoder target pose.*/
 void SerialComTlt::setPoseM1(unsigned int pose){
     std::vector<unsigned char> params;
     // Flip Integer
@@ -319,6 +154,8 @@ void SerialComTlt::setPoseM1(unsigned int pose){
     sendCmd("RT", params);
     if(debug_) cout << "setPoseM1: " << mot1_ticks_ << endl;
 }
+
+/*Serial command to set motor 2 encoder target pose.*/
 void SerialComTlt::setPoseM2(unsigned int pose){
     std::vector<unsigned char> params;
     // Flip Integer
@@ -329,6 +166,8 @@ void SerialComTlt::setPoseM2(unsigned int pose){
     sendCmd("RT", params);
     if(debug_) cout << "setPoseM2: " << mot2_ticks_ << endl;
 }
+
+/*Serial command to set motor 1 percent speed.*/
 void SerialComTlt::setPercentSpeedM1(unsigned int percent){
     //if(percent > 100) percent = 100;
     if(percent < 0) percent = 0;
@@ -340,6 +179,8 @@ void SerialComTlt::setPercentSpeedM1(unsigned int percent){
     sendCmd("RT",params);
     if(debug_) cout << "setPercentSpeedM1: " << mot1_percent_speed_ << endl;
 }
+
+/*Serial command to set motor 2 percent speed.*/
 void SerialComTlt::setPercentSpeedM2(unsigned int percent){
     //if(percent > 100) percent = 100;
     if(percent < 0) percent = 0;
@@ -351,82 +192,86 @@ void SerialComTlt::setPercentSpeedM2(unsigned int percent){
     sendCmd("RT",params);
     if(debug_) cout << "setPercentSpeedM2: " << mot2_percent_speed_ << endl;
 }
+
+/*Serial commands to set both motor percent speeds.*/
 void SerialComTlt::setPercentSpeedAll(unsigned int percent){
     setPercentSpeedM1(percent);
     setPercentSpeedM2(percent);
 }
 
-//Move Commands
-// - down: retract until stopped
-// - up: extend until stopped
-// - pose: extract or extend to match set pose
-/*Serial command to retract motor 1*/
+/*Serial command to retract motor 1.*/
 void SerialComTlt::moveM1Down(){
     sendCmd("RE",MOVE_M1_DOWN);
     if(debug_) cout << "moveM1Down" << endl;
 }
-/*Serial command to extend motor 1*/
+
+/*Serial command to extend motor 1.*/
 void SerialComTlt::moveM1Up(){
     sendCmd("RE",MOVE_M1_UP);
     if(debug_) cout << "moveM1Up" << endl;
 }
-/*Serial command to move motor 1 to previously set user pose*/
+
+/*Serial command to move motor 1 to previously set user pose.*/
 void SerialComTlt::moveM1Pose(){
     sendCmd("RE",MOVE_M1_POSE);
     if(debug_) cout << "moveM1Pose" << endl;
 }
+
 /*Serial command to retract motor 2*/
 void SerialComTlt::moveM2Down(){
     sendCmd("RE",MOVE_M2_DOWN);
     if(debug_) cout << "moveM2Down" << endl;
 }
-/*Serial command to extend motor 2*/
+
+/*Serial command to extend motor 2.*/
 void SerialComTlt::moveM2Up(){
     sendCmd("RE",MOVE_M2_UP);
     if(debug_) cout << "moveM2Up" << endl;
 }
-/*Serial command to move motor 1 to previously set user pose*/
+
+/*Serial command to move motor 1 to previously set user pose.*/
 void SerialComTlt::moveM2Pose(){
     sendCmd("RE",MOVE_M2_POSE);
     if(debug_) cout << "moveM2Pose" << endl;
 }
-/*Serial command to retract all motors*/
+
+/*Serial command to retract all motors.*/
 void SerialComTlt::moveAllDown(){
     sendCmd("RE",MOVE_ALL_DOWN);
     if(debug_) cout << "moveAllDown" << endl;
 }
-/*Serial command to extend all motors*/
+
+/*Serial command to extend all motors.*/
 void SerialComTlt::moveAllUp(){
     sendCmd("RE",MOVE_ALL_UP);
     if(debug_) cout << "moveAllUp" << endl;
 }
-/*Serial command to move all motors to previously set user pose*/
+
+/*Serial command to move all motors to previously set user pose.*/
 void SerialComTlt::moveAllPose(){
     sendCmd("RE",MOVE_ALL_POSE);
     if(debug_) cout << "moveAllPose" << endl;
 }
 
-/*
-Stop Commands:
-*/
+/*Serial command to stop motor 1.*/
 void SerialComTlt::stopM1(){
     sendCmd("RS",STOP_M1_FAST);
     if (debug_) cout << "SerialComTlt:stopMot1" << endl;
 }
+
+/*Serial command to stop motor 2.*/
 void SerialComTlt::stopM2(){
     sendCmd("RS",STOP_M2_FAST);
     if (debug_) cout << "SerialComTlt:stopMot2" << endl;
 }
+
+/*Serial command to stop all motors.*/
 void SerialComTlt::stopAll(){
     sendCmd("RS",STOP_ALL_FAST);
     if (debug_)cout << "SerialComTlt::stopMotAll" << endl;
 }
 
-/*
-Feedback and Checksum
-*/
-
-// compute checksum
+/*Compute checksum.*/
 unsigned short SerialComTlt::calculateChecksum(vector<unsigned char> *cmd){
     unsigned short crc = 0;
     for(vector<unsigned char>::iterator it=cmd->begin(); it!=cmd->end(); ++it){
@@ -435,7 +280,7 @@ unsigned short SerialComTlt::calculateChecksum(vector<unsigned char> *cmd){
     return crc;
 }
 
-// compare response checksum with calculated
+/*Compare response checksum with calculated checksum.*/
 bool SerialComTlt::checkResponseChecksum(vector<unsigned char> *response){
     unsigned short response_checksum_lsb = *(response->end()-2);
     unsigned short response_checksum_msb = *(response->end()-1);
@@ -471,13 +316,13 @@ bool SerialComTlt::checkResponseChecksum(vector<unsigned char> *response){
     return false;
 }
 
+/*Check response error code.*/
 bool SerialComTlt::checkResponseAck(vector<unsigned char> *response){
     if(response->size()>4){
         unsigned short cmd_status = *(response->begin()+2);
         if(cmd_status == 0x06 ){
             return true;
         }
-
         else if (cmd_status == 0x81 ){
             cout << "SerialComTlt::checkResponseAck - Cmd Fail! :  Error 81 Parameter data error "<< endl;
         }
@@ -497,6 +342,7 @@ bool SerialComTlt::checkResponseAck(vector<unsigned char> *response){
     return false;
 }
 
+/*Read response byte by byte.*/
 vector<unsigned char> SerialComTlt::feedback(vector<unsigned char> sent_data){
     int i = 0;
     int timeout =0;
@@ -578,13 +424,7 @@ vector<unsigned char> SerialComTlt::feedback(vector<unsigned char> sent_data){
     return received_data;
 }
 
-
-/*
-Extract:
- - pose
- - speed
- - status
-*/
+/*Extract pose from comm response*/
 bool SerialComTlt::extractPose(vector<unsigned char> response, int mot){
     unsigned int position = response[6] << 8 | response[5];
 
@@ -594,6 +434,7 @@ bool SerialComTlt::extractPose(vector<unsigned char> response, int mot){
 
     return true;
 }
+/*Extract percent speed from comm response.*/
 bool SerialComTlt::extractPercentSpeed(vector<unsigned char> response, int mot){
     unsigned int speed = response[6] << 8 | response[5];
 
@@ -603,28 +444,20 @@ bool SerialComTlt::extractPercentSpeed(vector<unsigned char> response, int mot){
 
     return true;
 }
+/*Extract status from serial comm response.*/
 bool SerialComTlt::extractStatus(vector<unsigned char> response, int mot){
+    if(!(mot == 1 || mot == 2)) return false;
     unsigned char status = response[5];
 
-    if(mot == 1){
-        mot1_initialized_ = static_cast<bool>(status & 0x01);
-        mot1_retracting_ = static_cast<bool>(status & 0x02);
-        mot1_extending_ = static_cast<bool>(status & 0x04);
+    for(int i=0; i<8; i++){
+        if(mot == 1) mot1_status_[i] = static_cast<bool>(status & (0x01 << i));
+        if(mot == 2) mot2_status_[i] = static_cast<bool>(status & (0x01 << i));
     }
-    else if(mot == 2){
-        mot2_initialized_ = static_cast<bool>(status & 0x01);
-        mot2_retracting_ = static_cast<bool>(status & 0x02);
-        mot2_extending_ = static_cast<bool>(status & 0x04);
-    }
-    else{
-        return false;
-    }
+
     return true;
 }
 
-/*
-* Converter
-*/
+/*Converte integer to bytes. Big Endian.*/
 vector<unsigned char> SerialComTlt::intToBytes(unsigned int paramInt){
     vector<unsigned char> arrayOfByte(4);
     for (int i = 0; i < 4; i++)
@@ -695,7 +528,7 @@ bool SerialComTlt::sendCmd(string cmd, vector<unsigned char> param){
     // Receive Response
     vector<unsigned char> output = feedback(final_cmd);
      if(output.size() == 0){
-        cout << "SerialComTlt::sendCmd::Response: empty" << endl;
+        cout << "SerialComTlt::sendCmd::ResponseError: Empty" << endl;
         lock_.unlock();
         return false;
     }
@@ -749,23 +582,8 @@ bool SerialComTlt::sendCmd(string cmd, vector<unsigned char> param){
     return true;
 }
 
-// Macro Functions
-// - high level functions that read from global variables
-/*Get current lift position in meters*/
-float SerialComTlt::get_position(){
-    int mot1_norm_pose = mot1_ticks_ - MOTOR1_TICK_OFFSET;
-    if(mot1_norm_pose < 0) mot1_norm_pose = 0;
-
-    int mot2_norm_pose = mot2_ticks_ - MOTOR2_TICK_OFFSET;
-    if(mot2_norm_pose < 0) mot2_norm_pose = 0;
-
-    float mot1_meters = static_cast<float>(mot1_norm_pose * MOTOR1_TICKS_TO_METERS);
-    float mot2_meters = static_cast<float>(mot2_norm_pose * MOTOR2_TICKS_TO_METERS);
-
-    return mot1_meters + mot2_meters;
-}
-/*Set goal lift position in meters*/
-void SerialComTlt::set_position(float position){
+/*Convert position [m] to encoder ticks.*/
+void SerialComTlt::convertPosition2Ticks(float position, unsigned int* mot1_ticks, unsigned int* mot2_ticks){
     // check bounds
     if(position > ALL_MOTOR_METERS) position = ALL_MOTOR_METERS;
     if(position < 0) position = 0;
@@ -773,15 +591,59 @@ void SerialComTlt::set_position(float position){
     float mot1_meters = MOTOR1_METER_RATIO * position;
     float mot2_meters = MOTOR2_METER_RATIO * position;
 
-    int mot1_ticks = static_cast<int>(mot1_meters * MOTOR1_METERS_TO_TICKS);
-    int mot2_ticks = static_cast<int>(mot2_meters * MOTOR2_METERS_TO_TICKS);
+    *mot1_ticks = static_cast<int>(mot1_meters * MOTOR1_METERS_TO_TICKS);
+    *mot2_ticks = static_cast<int>(mot2_meters * MOTOR2_METERS_TO_TICKS);
 
-    if(mot1_ticks > MOTOR1_TICKS) mot1_ticks = MOTOR1_TICKS;
-    if(mot2_ticks > MOTOR2_TICKS) mot2_ticks = MOTOR2_TICKS;
+    *mot1_ticks = *mot1_ticks + MOTOR1_TICK_OFFSET;
+    *mot2_ticks = *mot2_ticks + MOTOR2_TICK_OFFSET;
 
-    mot1_ticks_goal_ = mot1_ticks + MOTOR1_TICK_OFFSET;
-    mot2_ticks_goal_ = mot2_ticks + MOTOR2_TICK_OFFSET;
+    if(*mot1_ticks > MOTOR1_TICKS) *mot1_ticks = MOTOR1_TICKS;
+    if(*mot2_ticks > MOTOR2_TICKS) *mot2_ticks = MOTOR2_TICKS;
 }
+
+/*Convert encoder ticks to position [m].*/
+void SerialComTlt::convertTicks2Position(unsigned int mot1_ticks, unsigned int mot2_ticks, float* position){
+    int mot1_norm_pose = mot1_ticks - MOTOR1_TICK_OFFSET;
+    if(mot1_norm_pose < 0) mot1_norm_pose = 0;
+
+    int mot2_norm_pose = mot2_ticks - MOTOR2_TICK_OFFSET;
+    if(mot2_norm_pose < 0) mot2_norm_pose = 0;
+
+    float mot1_meters = static_cast<float>(mot1_norm_pose * MOTOR1_TICKS_TO_METERS);
+    float mot2_meters = static_cast<float>(mot2_norm_pose * MOTOR2_TICKS_TO_METERS);
+
+    *position = mot1_meters + mot2_meters;
+}
+
+/*Get current lift position in meters*/
+float SerialComTlt::getPosition(){
+    float position;
+    convertTicks2Position(mot1_ticks_, mot2_ticks_, &position);
+    return position;
+}
+
+/*Set goal lift position in meters*/
+void SerialComTlt::setPosition(float position){
+    unsigned int mot1_ticks;
+    unsigned int mot2_ticks;
+    convertPosition2Ticks(position, &mot1_ticks, &mot2_ticks);
+    setPoseM1(mot1_ticks);
+    setPoseM2(mot2_ticks);
+}
+
+/*Check if goal has been reached*/
+bool SerialComTlt::isAtGoal(SerialComTlt::MotionGoal goal){
+    return isAtTicks(goal.mot1_ticks, goal.mot2_ticks);
+}
+
+/*Check if motors are at specified position*/
+bool SerialComTlt::isAtPosition(float position){
+    unsigned int mot1_ticks;
+    unsigned int mot2_ticks;
+    convertPosition2Ticks(position, &mot1_ticks, &mot2_ticks);
+    return isAtTicks(mot1_ticks, mot2_ticks);
+}
+
 /*Check if motors are at specified ticks*/
 bool SerialComTlt::isAtTicks(unsigned int ticks1, unsigned int ticks2){
     bool mot1_at_ticks = (
@@ -792,20 +654,24 @@ bool SerialComTlt::isAtTicks(unsigned int ticks1, unsigned int ticks2){
         mot2_ticks_ <= (ticks2 + TICK_ERROR_MARGIN));
     return mot1_at_ticks && mot2_at_ticks;
 }
+
 /*Check if motors full retracted*/
 bool SerialComTlt::isRetracted(){
     return isAtTicks(MOTOR1_TICK_OFFSET, MOTOR2_TICK_OFFSET);
 }
+
 /*Check if motors full extended*/
 bool SerialComTlt::isExtended(){
     return isAtTicks(MOTOR1_TICKS, MOTOR2_TICKS);
 }
+
 /*Check if above specified ticks*/
 bool SerialComTlt::isBelowTicks(unsigned int ticks1, unsigned int ticks2){
     bool mot1_below_ticks = mot1_ticks_ <= ticks1;
     bool mot2_below_ticks = mot2_ticks_ <= ticks2;
     return mot1_below_ticks && mot2_below_ticks;
 }
+
 /*Check if below specified ticks*/
 bool SerialComTlt::isAboveTicks(unsigned int ticks1, unsigned int ticks2){
     bool mot1_above_ticks = mot1_ticks_ >= ticks1;
@@ -813,7 +679,9 @@ bool SerialComTlt::isAboveTicks(unsigned int ticks1, unsigned int ticks2){
     return mot1_above_ticks && mot2_above_ticks;
 }
 
+/*FSM initialization state. Requires calibration to move to next step.*/
 SerialComTlt::State SerialComTlt::initState(){
+    // Calibration
     if(calibrate_){
         calibrate_ = false;
         return SerialComTlt::State::CALIB;
@@ -821,6 +689,7 @@ SerialComTlt::State SerialComTlt::initState(){
     return SerialComTlt::State::INIT;
 }
 
+/*Calibration procedure to find speed in [m/s]*/
 bool SerialComTlt::calibProcedure(unsigned int direction,unsigned int speed,unsigned int m1_goal,unsigned int m2_goal,float* speed_result){
     m1_goal = static_cast<unsigned int>(std::round(m1_goal));
     m2_goal = static_cast<unsigned int>(std::round(m2_goal));
@@ -859,29 +728,29 @@ bool SerialComTlt::calibProcedure(unsigned int direction,unsigned int speed,unsi
             }
         case SerialComTlt::MicroState::END:
             // Calculate time elapsed
-            int time_elapsed = std::chrono::duration_cast<std::chrono::seconds>(calib_end_time_ - calib_start_time_).count();
+            int time_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(calib_end_time_ - calib_start_time_).count();
             // Calculate ticks elapsed
             int tick_elapsed = calib_end_ticks_ - calib_start_ticks_;
             // Calculate Speed
-            if(speed_result) *speed_result = std::abs(tick_elapsed/time_elapsed);
-            next_micro_state_ = SerialComTlt::MicroState::INIT;
-            break;
+            if(speed_result) *speed_result = std::abs(tick_elapsed*1000/time_elapsed);
+            // Exit
+            micro_state_ = next_micro_state_ = SerialComTlt::MicroState::INIT;
+            return true;
     }
     micro_state_ = next_micro_state_;
-    return micro_state_ == SerialComTlt::MicroState::INIT;
+    return false;
 }
 
+/*FSM calibration state; fully retracts, fully extends, then retracts again.*/
 SerialComTlt::State SerialComTlt::calibState(){
     switch(calib_state_)
     {
         case SerialComTlt::CalibState::INIT:
-            cout << "calibState::INIT" << endl;
             next_calib_state_ = SerialComTlt::CalibState::RETRACT;
             break;
         case SerialComTlt::CalibState::RETRACT:
             if(calibProcedure(0, 65535, MOTOR1_TICK_OFFSET, MOTOR2_TICK_OFFSET, nullptr)){
                 next_calib_state_ = SerialComTlt::CalibState::EXTEND_LOWER;
-                cout << "Retracted..." << endl;
             }
             else
                 next_calib_state_ = calib_state_;
@@ -889,15 +758,13 @@ SerialComTlt::State SerialComTlt::calibState(){
         case SerialComTlt::CalibState::EXTEND_LOWER:
             if(calibProcedure(1, 1, MOTOR1_TICKS/2, MOTOR2_TICKS/2, &min_speed_up_)){
                 next_calib_state_ = SerialComTlt::CalibState::EXTEND_UPPER;
-                cout << "Extended lower: min_speed_up: in m/s=" << min_speed_up_*MOTOR1_TICKS_TO_METERS << " at percent speed: " <<  mot1_percent_speed_ << endl;
             }
             else
                 next_calib_state_ = calib_state_;
             break;
         case SerialComTlt::CalibState::EXTEND_UPPER:
-            if(calibProcedure(1, 65535, MOTOR1_TICKS, MOTOR2_TICKS, &max_speed_up_)){
+            if(calibProcedure(1, 999, MOTOR1_TICKS, MOTOR2_TICKS, &max_speed_up_)){
                 next_calib_state_ = SerialComTlt::CalibState::RETRACT_UPPER;
-                cout << "Extended upper: max_speed_up: in m/s=" << min_speed_up_*MOTOR1_TICKS_TO_METERS << " at percent speed: " <<  mot1_percent_speed_ << endl;
             }
             else
                 next_calib_state_ = calib_state_;
@@ -905,42 +772,195 @@ SerialComTlt::State SerialComTlt::calibState(){
         case SerialComTlt::CalibState::RETRACT_UPPER:
             if(calibProcedure(0, 1, MOTOR1_TICKS/2, MOTOR2_TICKS/2, &min_speed_down_)){
                 next_calib_state_ = SerialComTlt::CalibState::RETRACT_LOWER;
-                cout << "Retract upper: min_speed_down: in m/s=" << min_speed_down_*MOTOR1_TICKS_TO_METERS << " at percent speed: " <<  mot1_percent_speed_ << endl;
             }
             else
                 next_calib_state_ = calib_state_;
             break;
         case SerialComTlt::CalibState::RETRACT_LOWER:
-            if(calibProcedure(0, 100, MOTOR1_TICK_OFFSET, MOTOR2_TICK_OFFSET, &max_speed_down_)){
-                next_calib_state_ = SerialComTlt::CalibState::INIT;
-                cout << "Retract lower: max_speed_down: in m/s=" << max_speed_down_*MOTOR1_TICKS_TO_METERS << " at percent speed: " <<  mot1_percent_speed_ << endl;
+            if(calibProcedure(0, 999, MOTOR1_TICK_OFFSET, MOTOR2_TICK_OFFSET, &max_speed_down_)){
+                next_calib_state_ = SerialComTlt::CalibState::EXIT;
             }
             else
                 next_calib_state_ = calib_state_;
             break;
+        case SerialComTlt::CalibState::EXIT:
+            calib_state_ = next_calib_state_ = SerialComTlt::CalibState::INIT;
+            return SerialComTlt::State::IDLE;
     }
     calib_state_ = next_calib_state_;
-    if(calib_state_ == SerialComTlt::CalibState::INIT)
-        return SerialComTlt::State::IDLE;
-    else
-        return SerialComTlt::State::CALIB;
+    return SerialComTlt::State::CALIB;
 }
 
+/*FSM idle state, moves to motion or calibration states.*/
 SerialComTlt::State SerialComTlt::idleState(){
+    // Calibration
+    if(calibrate_){
+        calibrate_ = false;
+        return SerialComTlt::State::CALIB;
+    }
+    // Motion
+    if(!motion_queue_.empty() || motion_directed_){
+        return SerialComTlt::State::MOTION;
+    }
     return SerialComTlt::State::IDLE;
 }
 
+/*Queue up a MotionGoal using motor ticks and [m/s].*/
+void SerialComTlt::motionQueueGoal(unsigned int mot1_ticks, unsigned int mot2_ticks, float speed){
+    MotionGoal goal;
+    goal.mot1_ticks = mot1_ticks;
+    goal.mot2_ticks = mot2_ticks;
+    goal.speed = speed;
+    motion_queue_.push(goal);
+}
+
+/*Queue up a MotionGoal using a single motor's ticks.*/
+void SerialComTlt::motionQueueTickGoal(unsigned int mot_ticks, unsigned int mot, float speed){
+    MotionGoal goal;
+    if(mot == 1){
+        goal.mot1_ticks = mot_ticks;
+        goal.mot2_ticks = -1;
+    }
+    else if (mot == 2){
+        goal.mot1_ticks = -1;
+        goal.mot2_ticks = mot_ticks;
+    }
+    else return;
+    goal.speed = speed;
+    motion_queue_.push(goal);
+}
+
+/*Queue up a MotionGoal using a position in meters.*/
+void SerialComTlt::motionQueuePositionGoal(float position, float speed){
+    unsigned int mot1_ticks, mot2_ticks;
+    convertPosition2Ticks(position, &mot1_ticks, &mot2_ticks);
+    MotionGoal goal;
+    goal.mot1_ticks = mot1_ticks;
+    goal.mot2_ticks = mot2_ticks;
+    goal.speed = speed;
+    motion_queue_.push(goal);
+}
+
+/*Move to a MotionGoal*/
+bool SerialComTlt::motionPoseProcedure(MotionGoal goal){
+    switch(micro_state_){
+        case SerialComTlt::MicroState::INIT:
+            // Set Position
+            setPoseM1(goal.mot1_ticks);
+            setPoseM2(goal.mot2_ticks);
+            // Set Speed TODO
+            // Start Moving
+            moveAllPose();
+            // Next State
+            next_micro_state_ = SerialComTlt::MicroState::WAIT;
+            break;
+        case SerialComTlt::MicroState::WAIT:
+            // Check
+            if(isAtGoal(goal)){
+                // Stop Moving
+                stopAll();
+                // Next State
+                next_micro_state_ = SerialComTlt::MicroState::END;
+            }
+            else{
+                next_micro_state_ = SerialComTlt::MicroState::WAIT;
+            }
+            break;
+        case SerialComTlt::MicroState::END:
+            micro_state_ = next_micro_state_ = SerialComTlt::MicroState::INIT;
+            return true;
+    }
+    micro_state_ = next_micro_state_;
+    return false;
+}
+
+/*Move in direction for a given time.*/
+bool SerialComTlt::motionDirectedProcedure(int direction, chrono::milliseconds duration){
+    switch(micro_state_){
+        case SerialComTlt::MicroState::INIT:
+            motion_start_time_ = chrono::steady_clock::now();
+            if(direction > 0) moveAllUp();
+            if(direction < 0) moveAllDown();
+            next_micro_state_ = SerialComTlt::MicroState::WAIT;
+            break;
+        case SerialComTlt::MicroState::WAIT:
+            if(!duration.count()){
+                break;
+            }
+            motion_end_time_ = chrono::steady_clock::now();
+            chrono::milliseconds elapsed;
+            elapsed = chrono::duration_cast<chrono::milliseconds>(motion_end_time_ - motion_start_time_);
+            if(elapsed.count() >= duration.count()){
+                stopAll();
+                next_micro_state_ = SerialComTlt::MicroState::END;
+            }
+            else next_micro_state_ = micro_state_;
+            break;
+        case SerialComTlt::MicroState::END:
+            micro_state_ = next_micro_state_ = SerialComTlt::MicroState::INIT;
+            return true;
+    }
+    micro_state_ = next_micro_state_;
+    return false;
+}
+
+/*FSM motion state: pops MotionGoals from queue or moves in a direction specified.*/
 SerialComTlt::State SerialComTlt::motionState(){
+    switch(motion_state_){
+        case SerialComTlt::MotionState::INIT:
+            if(motion_directed_){
+                // Clear Queue
+                std::queue<SerialComTlt::MotionGoal> empty;
+                std::swap(motion_queue_, empty);
+                next_motion_state_ = SerialComTlt::MotionState::MOTION_DIRECTED;
+                break;
+            }
+            if(!motion_queue_.empty()){
+                motion_goal_ = motion_queue_.front();
+                if(motion_goal_.mot1_ticks < 0) motion_goal_.mot1_ticks = mot1_ticks_;
+                if(motion_goal_.mot2_ticks < 0) motion_goal_.mot2_ticks = mot2_ticks_;
+                motion_queue_.pop();
+                next_motion_state_ = SerialComTlt::MotionState::MOTION_POSE;
+                break;
+            }
+            else{
+                next_motion_state_ = SerialComTlt::MotionState::EXIT;
+            }
+            break;
+        case SerialComTlt::MotionState::MOTION_DIRECTED:
+            if(motionDirectedProcedure(motion_directed_, motion_duration_)){
+                motion_directed_ = 0;
+                motion_duration_ = chrono::milliseconds(0);
+                next_motion_state_ = SerialComTlt::MotionState::EXIT;
+            }
+            else next_motion_state_ = motion_state_;
+            break;
+        case SerialComTlt::MotionState::MOTION_POSE:
+            if(motionPoseProcedure(motion_goal_)){
+                if(!motion_queue_.empty())
+                    next_motion_state_ = SerialComTlt::MotionState::INIT;
+                else
+                    next_motion_state_ = SerialComTlt::MotionState::EXIT;
+            }
+            break;
+        case SerialComTlt::MotionState::EXIT:
+            motion_state_ = next_motion_state_ = SerialComTlt::MotionState::INIT;
+            return SerialComTlt::State::IDLE;
+    }
+    motion_state_ = next_motion_state_;
     return SerialComTlt::State::MOTION;
 }
 
+/*Failure state.*/
 SerialComTlt::State SerialComTlt::failureState(){
     return SerialComTlt::State::FAILURE;
 }
 
-
 /*
- * Loop to maintain the remote function with RC command
+Main communication loop:
+- send RC heartbeat to keep communication alive.
+- at every loop get current encoder ticks and status.
+- use state machine to determine actions to take.
 */
 void SerialComTlt::comLoop(){
     vector<unsigned char> params = {0x01, 0x00, 0xff};
@@ -948,15 +968,13 @@ void SerialComTlt::comLoop(){
         while(com_started_){
             // Start/Maintain Communication
             sendCmd("RC",params);
-
             // Update Data
             getPoseM1();
             getPoseM2();
-            getPercentSpeedM1();
-            getPercentSpeedM2();
-            //getStatusM1();
-            //getStatusM2();
-
+            // getPercentSpeedM1();
+            // getPercentSpeedM2();
+            getStatusM1();
+            getStatusM2();
             // State Machine
             switch(state_)
             {
@@ -977,44 +995,6 @@ void SerialComTlt::comLoop(){
                     break;
             }
             state_ = next_state_;
-
-
-            // if(!manual_target_ && (go_up_ || go_down_)){
-            //     manual_target_ = true;
-            //     if(go_up_) moveUp();
-            //     else moveDown();
-
-            // }
-            // else{
-            //     getColumnSize();
-            //     if(current_target_ !=last_target_){
-            //         if (process_target_) stop();
-            //         setColumnSize(current_target_);
-            //         last_target_ = current_target_;
-            //         process_target_= true;
-            // cout << "SerialComTtl::comLoop - start processing target" << endl;
-            //     }
-
-            //     if(process_target_ && (mot1_ticks_ ==  mot_ticks_)){
-            //     stop();
-            // cout << "SerialComTlt::comLoop - stop processing target" << endl;
-            //         process_target_= false;
-            //     }
-
-            // if(((mot1_ticks_goal_ + margin_) >= mot1_ticks_) && ((mot1_ticks_goal_ - margin_) <= mot1_ticks_)){
-            //     stopM1();
-            // }
-            // if(((mot2_ticks_goal_ + margin_) >= mot2_ticks_) && ((mot2_ticks_goal_ - margin_) <= mot2_ticks_)){
-            //     stopM2();
-            // }
-
-            // }
-            // if(manual_target_ && !go_up_ && !go_down_){
-            //     stop();
-            //     manual_target_= false;
-            // }
-
-            //usleep(10);
         }
         usleep(1);
     }

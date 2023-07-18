@@ -41,7 +41,7 @@ class TltNode
         ros::Subscriber sub_motor2_ticks_;
 
         // Subscriber Callback
-        void cbColumnSize( std_msgs::Float32);
+        void cbPosition( std_msgs::Float32);
         void cbDurationUp( std_msgs::Int16);
         void cbDurationDown( std_msgs::Int16);
         void cbMotor1Ticks( std_msgs::Int32);

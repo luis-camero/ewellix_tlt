@@ -18,7 +18,7 @@ TltNode::TltNode(ros::NodeHandle private_nh)
     srv_init_sequence_ = private_nh.advertiseService("init_sequence", &TltNode::srvInitSequence, this);
 
     // Subscribers
-    sub_column_size_ = private_nh.subscribe("/ewellix/size", 1, &TltNode::cbColumnSize,this);
+    sub_column_size_ = private_nh.subscribe("/ewellix/size", 1, &TltNode::cbPosition,this);
     sub_column_duration_up_ = private_nh.subscribe("/ewellix/duration_up", 1, &TltNode::cbDurationUp,this);
     sub_column_duration_down_ = private_nh.subscribe("/ewellix/duration_down", 1, &TltNode::cbDurationDown,this);
 
@@ -68,45 +68,39 @@ void TltNode::publishJoinStates(){
         joint_states.velocity.resize(size);
         joint_states.effort.resize(size);
         joint_states.name[0] = "ewellix_lift_top_joint";
-        joint_states.position[0] = srl_.current_pose_;
+        joint_states.position[0] = srl_.getPosition();
         joint_states.velocity[0] = 0.0;
         joint_states.effort[0] = 0.1;
-        //joint_states.name[1] = "mot1";
-        //joint_states.position[1] = srl_.mot1_pose_;
-        //joint_states.name[2] = "mot2";
-        //joint_states.position[2] = srl_.mot2_pose_;
-        //joint_states.name[3] = "mot1_mot2";
-        //joint_states.position[3] = srl_.mot1_pose_ + srl_.mot2_pose_;
         pub_column_pose_.publish(joint_states);
         rateController.sleep();
     }
 }
 
-void TltNode::cbColumnSize( std_msgs::Float32 msg){
-    srl_.current_target_ = msg.data;
-    cout << "TltNode::cbColumnSize - Set current target: " << msg.data << endl;
+void TltNode::cbPosition( std_msgs::Float32 msg){
+    srl_.motionQueuePositionGoal(msg.data, 100);
 }
 
 void TltNode::cbDurationUp( std_msgs::Int16 msg){
-   srl_.moveUp(msg.data);
+    srl_.motion_directed_ = 1;
+    srl_.motion_duration_ = chrono::milliseconds(msg.data*1000);
 }
 
 void TltNode::cbDurationDown( std_msgs::Int16 msg){
-    srl_.moveDown(msg.data);
+    srl_.motion_directed_ = -1;
+    srl_.motion_duration_ = chrono::milliseconds(msg.data*1000);
 }
 
 void TltNode::cbMotor1Ticks(std_msgs::Int32 msg){
-    srl_.moveMot1(msg.data);
+    srl_.motionQueueTickGoal(msg.data, 1, 100);
 }
 
 void TltNode::cbMotor2Ticks(std_msgs::Int32 msg){
-    srl_.moveMot2(msg.data);
+    srl_.motionQueueTickGoal(msg.data, 2, 100);
 }
 
 void TltNode::cbJoy( sensor_msgs::Joy msg){
-
-    srl_.go_up_ = msg.buttons[13];
-    srl_.go_down_ = msg.buttons[14];
+    //srl_.go_up_ = msg.buttons[13];
+    //srl_.go_down_ = msg.buttons[14];
 }
 
 bool TltNode::srvInitSequence(std_srvs::Trigger::Request &req,
@@ -122,7 +116,6 @@ bool TltNode::srvInitSequence(std_srvs::Trigger::Request &req,
     res.message = "Moved arm to max and min positions.";
     return true;
 }
-
 
 
 int main(int argc, char *argv[]){
