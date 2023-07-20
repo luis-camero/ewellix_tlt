@@ -805,13 +805,22 @@ SerialComTlt::State SerialComTlt::idleState(){
     return SerialComTlt::State::IDLE;
 }
 
+/*Immediately Stop Motion*/
+void SerialComTlt::motionStop(){
+    stopAll();
+    motionQueueClear();
+    motion_stop_ = true;
+}
+
 /*Queue up a MotionGoal using motor ticks and [m/s].*/
 void SerialComTlt::motionQueueGoal(unsigned int mot1_ticks, unsigned int mot2_ticks, float speed){
     MotionGoal goal;
     goal.mot1_ticks = mot1_ticks;
     goal.mot2_ticks = mot2_ticks;
     goal.speed = speed;
+    motion_queue_lock_.lock();
     motion_queue_.push(goal);
+    motion_queue_lock_.unlock();
 }
 
 /*Queue up a MotionGoal using a single motor's ticks.*/
@@ -827,7 +836,9 @@ void SerialComTlt::motionQueueTickGoal(unsigned int mot_ticks, unsigned int mot,
     }
     else return;
     goal.speed = speed;
+    motion_queue_lock_.lock();
     motion_queue_.push(goal);
+    motion_queue_lock_.unlock();
 }
 
 /*Queue up a MotionGoal using a position in meters.*/
@@ -838,7 +849,17 @@ void SerialComTlt::motionQueuePositionGoal(float position, float speed){
     goal.mot1_ticks = mot1_ticks;
     goal.mot2_ticks = mot2_ticks;
     goal.speed = speed;
+    motion_queue_lock_.lock();
     motion_queue_.push(goal);
+    motion_queue_lock_.unlock();
+}
+
+/*Clear queue*/
+void SerialComTlt::motionQueueClear(){
+    std::queue<SerialComTlt::MotionGoal> empty;
+    motion_queue_lock_.lock();
+    std::swap(motion_queue_, empty);
+    motion_queue_lock_.unlock();
 }
 
 /*Move to a MotionGoal*/
@@ -855,6 +876,9 @@ bool SerialComTlt::motionPoseProcedure(MotionGoal goal){
             next_micro_state_ = SerialComTlt::MicroState::WAIT;
             break;
         case SerialComTlt::MicroState::WAIT:
+            if(motion_stop_){
+                next_micro_state_ = SerialComTlt::MicroState::END;
+            }
             // Check
             if(isAtGoal(goal)){
                 // Stop Moving
@@ -868,6 +892,7 @@ bool SerialComTlt::motionPoseProcedure(MotionGoal goal){
             break;
         case SerialComTlt::MicroState::END:
             micro_state_ = next_micro_state_ = SerialComTlt::MicroState::INIT;
+            motion_stop_ = false;
             return true;
     }
     micro_state_ = next_micro_state_;
@@ -884,6 +909,9 @@ bool SerialComTlt::motionDirectedProcedure(int direction, chrono::milliseconds d
             next_micro_state_ = SerialComTlt::MicroState::WAIT;
             break;
         case SerialComTlt::MicroState::WAIT:
+            if(motion_stop_){
+                next_micro_state_ = SerialComTlt::MicroState::END;
+            }
             if(!duration.count()){
                 break;
             }
@@ -898,6 +926,7 @@ bool SerialComTlt::motionDirectedProcedure(int direction, chrono::milliseconds d
             break;
         case SerialComTlt::MicroState::END:
             micro_state_ = next_micro_state_ = SerialComTlt::MicroState::INIT;
+            motion_stop_ = false;
             return true;
     }
     micro_state_ = next_micro_state_;
@@ -910,8 +939,7 @@ SerialComTlt::State SerialComTlt::motionState(){
         case SerialComTlt::MotionState::INIT:
             if(motion_directed_){
                 // Clear Queue
-                std::queue<SerialComTlt::MotionGoal> empty;
-                std::swap(motion_queue_, empty);
+                motionQueueClear();
                 next_motion_state_ = SerialComTlt::MotionState::MOTION_DIRECTED;
                 break;
             }

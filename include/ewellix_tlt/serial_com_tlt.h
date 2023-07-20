@@ -132,6 +132,7 @@ class SerialComTlt
         };
         bool motion_stop_;
         MotionGoal motion_goal_;
+        std::mutex motion_queue_lock_;
         std::queue<MotionGoal> motion_queue_;
         int motion_directed_; // -1 down, 1 up
         chrono::milliseconds motion_duration_;
@@ -139,9 +140,11 @@ class SerialComTlt
         chrono::steady_clock::time_point motion_end_time_;
         MotionState motion_state_;
         MotionState next_motion_state_;
+        void motionStop();
         void motionQueueGoal(unsigned int mot1_ticks, unsigned int mot2_ticks, float speed);
         void motionQueueTickGoal(unsigned int mot_ticks, unsigned int mot, float speed);
         void motionQueuePositionGoal(float position, float speed);
+        void motionQueueClear();
         bool motionPoseProcedure(MotionGoal goal);
         bool motionDirectedProcedure(int direction, chrono::milliseconds duration);
         State motionState();

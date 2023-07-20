@@ -49,6 +49,7 @@ include_directories(include
 add_executable(${PROJECT_NAME}_node
   src/tlt_node.cpp
   src/serial_com_tlt.cpp
+  src/joint_trajectory_action_server.cpp
  )
 
 
