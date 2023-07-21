@@ -1,6 +1,7 @@
 #ifndef TLTNODE_H
 #define TLTNODE_H
 
+#include "joint_trajectory_action_server.h"
 #include "ros/ros.h"
 #include "sensor_msgs/JointState.h"
 #include "sensor_msgs/Joy.h"
@@ -25,6 +26,9 @@ class TltNode
         SerialComTlt srl_;
         thread com_thread_;
         thread join_states_thread_;
+        // Actions
+        JointTrajectoryActionServer* srv_follow_joint_trajectory_;
+
         // Publishers
         ros::Publisher pub_column_pose_;
 

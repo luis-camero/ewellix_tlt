@@ -9,6 +9,7 @@ set(${PROJECT_NAME}_CATKIN_DEPS
   rospy
   std_msgs
   sensor_msgs
+  actionlib
   serial
 )
 
@@ -32,7 +33,6 @@ catkin_package(
 #  INCLUDE_DIRS include
   LIBRARIES serial ${PROJECT_NAME}
   CATKIN_DEPENDS ${${PROJECT_NAME}_CATKIN_DEPS}
-  DEPENDS boost
 )
 
 ###########

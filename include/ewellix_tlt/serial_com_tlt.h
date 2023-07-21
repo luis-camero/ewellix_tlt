@@ -22,7 +22,7 @@
 
 using namespace std;
 
-const int TICK_ERROR_MARGIN = 2;
+const int TICK_ERROR_MARGIN = 5;
 
 const int MOTOR1_TICKS = 850;
 const int MOTOR1_TICK_OFFSET = 10;
@@ -145,6 +145,7 @@ class SerialComTlt
         void motionQueueTickGoal(unsigned int mot_ticks, unsigned int mot, float speed);
         void motionQueuePositionGoal(float position, float speed);
         void motionQueueClear();
+        void motionQueuePrune();
         bool motionPoseProcedure(MotionGoal goal);
         bool motionDirectedProcedure(int direction, chrono::milliseconds duration);
         State motionState();

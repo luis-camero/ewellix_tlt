@@ -14,12 +14,10 @@ class JointTrajectoryActionServer
     public:
         enum ActionServerState
         {
-            INITIALIZING=0,
+            INIT=0,
             IDLE,
-            PRE_PROCESSING_PENDING,
-            PRE_PROCESSING_IN_PROGRESS,
-            TRAJECTORY_EXECUTION_PENDING,
-            TRAJECTORY_EXECUTION_IN_PROGRESS,
+            SETUP,
+            MOTION,
             COUNT
         };
 
@@ -31,12 +29,10 @@ class JointTrajectoryActionServer
 
         const char* ACTION_SERVER_STATE_NAMES[int(ActionServerState::COUNT)] =
         {
-            "INITIALIZING",
+            "INIT",
             "IDLE",
-            "PRE_PROCESSING_PENDING",
-            "PRE_PROCESSING_IN_PROGRESS",
-            "TRAJECTORY_EXECUTION_PENDING",
-            "TRAJECTORY_EXECUTION_IN_PROGRESS"
+            "SETUP",
+            "MOTION"
         };
 
     private:
@@ -59,7 +55,7 @@ class JointTrajectoryActionServer
         // Params
         double default_goal_time_tolerance_;
         double default_goal_tolerance_;
-        std::vector<std::string> joint_names_;
+        std::vector<std::string> joint_names_ = {"ewellix_lift_top_joint"};
         std::string prefix_;
 
         // Action Server Callbacks

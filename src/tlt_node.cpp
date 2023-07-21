@@ -46,6 +46,8 @@ TltNode::TltNode(ros::NodeHandle private_nh)
         cout << "TltNode::TltNode - Serial Com : Fail! " << endl;
         abort();
     }
+
+    srv_follow_joint_trajectory_ = new JointTrajectoryActionServer("joint_trajectory_controller/follow_joint_trajectory", private_nh, srl_);
 }
 
 TltNode::~TltNode(){

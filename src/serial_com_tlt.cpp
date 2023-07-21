@@ -8,7 +8,7 @@ SerialComTlt::SerialComTlt(){
     com_started_ = false;
 
     // States
-    state_ = SerialComTlt::State::INIT;
+    state_ = SerialComTlt::State::IDLE;
     micro_state_ = SerialComTlt::MicroState::INIT;
     calib_state_ = SerialComTlt::CalibState::INIT;
     motion_state_ = SerialComTlt::MotionState::INIT;
@@ -17,6 +17,7 @@ SerialComTlt::SerialComTlt(){
     calibrate_ = false;
 
     // Motion State Control
+    motion_stop_ = false;
     motion_directed_ = 0;
     motion_duration_ = chrono::milliseconds(0);
 
@@ -679,6 +680,51 @@ bool SerialComTlt::isAboveTicks(unsigned int ticks1, unsigned int ticks2){
     return mot1_above_ticks && mot2_above_ticks;
 }
 
+/*Check if Drive 1 Available*/
+bool SerialComTlt::isDriveAvailableM1(){
+    return(mot1_status_[0]);
+}
+
+/*Check if Drive 2 Available*/
+bool SerialComTlt::isDriveAvailableM2(){
+    return(mot2_status_[0]);
+}
+
+/*Check if Drives Available*/
+bool SerialComTlt::isDriveAvailable(){
+    return(mot1_status_[0] && mot2_status_[0]);
+}
+
+/*Check if Motor 1 Motion Active*/
+bool SerialComTlt::isMotionActiveM1(){
+    return(mot1_status_[4]);
+}
+
+/*Check if Motor 2 Motion Active*/
+bool SerialComTlt::isMotionActiveM2(){
+    return(mot2_status_[4]);
+}
+
+/*Check if Motors Motion Active*/
+bool SerialComTlt::isMotionActive(){
+    return(mot1_status_[4] || mot2_status_[4]);
+}
+
+/*Check if Motor 1 Position Reached*/
+bool SerialComTlt::isPositionReachedM1(){
+    return(mot1_status_[5]);
+}
+
+/*Check if Motor 2 Position Reached*/
+bool SerialComTlt::isPositionReachedM2(){
+    return(mot2_status_[5]);
+}
+
+/*Check if Position Reached*/
+bool SerialComTlt::isPositionReached(){
+    return(mot1_status_[5] && mot2_status_[5]);
+}
+
 /*FSM initialization state. Requires calibration to move to next step.*/
 SerialComTlt::State SerialComTlt::initState(){
     // Calibration
@@ -862,6 +908,50 @@ void SerialComTlt::motionQueueClear(){
     motion_queue_lock_.unlock();
 }
 
+/*Prune queue*/
+void SerialComTlt::motionQueuePrune(){
+    motion_queue_lock_.lock();
+    std::queue<SerialComTlt::MotionGoal> pruned;
+    SerialComTlt::MotionGoal prev = motion_queue_.front();
+    motion_queue_.pop();
+    SerialComTlt::MotionGoal curr = motion_queue_.front();
+    bool direction = curr.mot1_ticks >= prev.mot1_ticks;
+    bool new_direction;
+    pruned.push(prev);
+    while(!motion_queue_.empty()){
+        curr = motion_queue_.front();
+        if(curr.mot1_ticks == prev.mot1_ticks){
+            new_direction = direction;
+        }
+        else{
+            curr.mot1_ticks >= prev.mot1_ticks;
+        }
+        // Same
+        if(((
+            curr.mot1_ticks <= (prev.mot1_ticks + TICK_ERROR_MARGIN)) && (
+            curr.mot1_ticks >= (prev.mot1_ticks - TICK_ERROR_MARGIN))) && ((
+            curr.mot2_ticks <= (prev.mot2_ticks + TICK_ERROR_MARGIN)) && (
+            curr.mot2_ticks >= (prev.mot2_ticks - TICK_ERROR_MARGIN)))){
+            motion_queue_.pop();
+        }
+        else if (direction && new_direction)
+        {
+            motion_queue_.pop();
+        }
+        else{
+            pruned.push(curr);
+            prev = curr;
+            motion_queue_.pop();
+            direction = new_direction;
+        }
+        if(motion_queue_.empty()){
+            pruned.push(curr);
+        }
+    }
+    std::swap(motion_queue_, pruned);
+    motion_queue_lock_.unlock();
+}
+
 /*Move to a MotionGoal*/
 bool SerialComTlt::motionPoseProcedure(MotionGoal goal){
     switch(micro_state_){
@@ -880,7 +970,7 @@ bool SerialComTlt::motionPoseProcedure(MotionGoal goal){
                 next_micro_state_ = SerialComTlt::MicroState::END;
             }
             // Check
-            if(isAtGoal(goal)){
+            if(isAtGoal(goal) || isPositionReached() || !isMotionActive()){
                 // Stop Moving
                 stopAll();
                 // Next State
@@ -1021,6 +1111,31 @@ void SerialComTlt::comLoop(){
                 case SerialComTlt::State::FAILURE:
                     next_state_ = failureState();
                     break;
+            }
+            if(state_ != next_state_){
+                cout << "State Transition: " << STATE_NAMES[int(state_)] << " -> " << STATE_NAMES[int(next_state_)] << endl;
+                if(next_state_ == State::CALIB){
+                    cout << "Pre-calib Status: ";
+                    for(auto it = mot1_status_.begin(); it != mot1_status_.end(); it++){
+                        cout << *it;
+                    }
+                    cout << "|";
+                    for(auto it = mot2_status_.begin(); it != mot2_status_.end(); it++){
+                        cout << *it;
+                    }
+                    cout << endl;
+                }
+                if(state_ == State::CALIB && next_state_ == State::IDLE){
+                    cout << "Pre-calib Status: ";
+                    for(auto it = mot1_status_.begin(); it != mot1_status_.end(); it++){
+                        cout << *it;
+                    }
+                    cout << "|";
+                    for(auto it = mot2_status_.begin(); it != mot2_status_.end(); it++){
+                        cout << *it;
+                    }
+                    cout << endl;
+                }
             }
             state_ = next_state_;
         }
