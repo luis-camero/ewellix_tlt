@@ -30,27 +30,29 @@ class TltNode
         JointTrajectoryActionServer* srv_follow_joint_trajectory_;
 
         // Publishers
-        ros::Publisher pub_column_pose_;
+        ros::Publisher pub_joint_states_;
+        ros::Publisher pub_column_position_;
 
         // Services
         ros::ServiceServer srv_init_sequence_;
 
         // Subscribers
-        ros::Subscriber sub_column_size_;
+        ros::Subscriber sub_column_stop_;
+        ros::Subscriber sub_column_position_;
         ros::Subscriber sub_column_duration_down_;
         ros::Subscriber sub_column_duration_up_;
-        ros::Subscriber sub_column_stop_;
         ros::Subscriber sub_joy_;
         ros::Subscriber sub_motor1_ticks_;
         ros::Subscriber sub_motor2_ticks_;
 
         // Subscriber Callback
-        void cbPosition( std_msgs::Float32);
-        void cbDurationUp( std_msgs::Int16);
-        void cbDurationDown( std_msgs::Int16);
-        void cbMotor1Ticks( std_msgs::Int32);
-        void cbMotor2Ticks( std_msgs::Int32);
-        void cbJoy( sensor_msgs::Joy);
+        void cbStop(std_msgs::Empty);
+        void cbPosition(std_msgs::Float32);
+        void cbDurationUp(std_msgs::Int16);
+        void cbDurationDown(std_msgs::Int16);
+        void cbMotor1Ticks(std_msgs::Int32);
+        void cbMotor2Ticks(std_msgs::Int32);
+        void cbJoy(sensor_msgs::Joy);
         void publishJoinStates();
 
         // Service Calls
