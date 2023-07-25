@@ -83,29 +83,29 @@ void TltNode::cbStop(std_msgs::Empty msg){
     ROS_INFO("Stopping all motion.");
 }
 
-void TltNode::cbPosition( std_msgs::Float32 msg){
+void TltNode::cbPosition(std_msgs::Float32 msg){
     srl_.motionQueuePositionGoal(msg.data, 100);
     ROS_INFO("Moving to '%0.2f' [m]", msg.data);
 }
 
-void TltNode::cbDurationUp( std_msgs::Int16 msg){
+void TltNode::cbDurationUp(std_msgs::Float32 msg){
     srl_.motion_directed_ = 1;
-    srl_.motion_duration_ = chrono::milliseconds(msg.data*1000);
-    ROS_INFO("Moving up for '%d' [sec]", msg.data);
+    srl_.motion_duration_ = chrono::milliseconds(static_cast<int>(msg.data*1000));
+    ROS_INFO("Moving up for '%2.2f' [sec]", msg.data);
 }
 
-void TltNode::cbDurationDown( std_msgs::Int16 msg){
+void TltNode::cbDurationDown(std_msgs::Float32 msg){
     srl_.motion_directed_ = -1;
-    srl_.motion_duration_ = chrono::milliseconds(msg.data*1000);
-    ROS_INFO("Moving down for '%d' [sec]", msg.data);
+    srl_.motion_duration_ = chrono::milliseconds(static_cast<int>(msg.data*1000));
+    ROS_INFO("Moving down for '%2.2f' [sec]", msg.data);
 }
 
-void TltNode::cbMotor1Ticks(std_msgs::Int32 msg){
+void TltNode::cbMotor1Ticks(std_msgs::Int16 msg){
     srl_.motionQueueTickGoal(msg.data, 1, 100);
     ROS_INFO("Moving motor 1 to '%d' ticks", msg.data);
 }
 
-void TltNode::cbMotor2Ticks(std_msgs::Int32 msg){
+void TltNode::cbMotor2Ticks(std_msgs::Int16 msg){
     srl_.motionQueueTickGoal(msg.data, 2, 100);
     ROS_INFO("Moving motor 2 to '%d' ticks", msg.data);
 }

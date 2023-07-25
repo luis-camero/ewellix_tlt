@@ -48,10 +48,10 @@ class TltNode
         // Subscriber Callback
         void cbStop(std_msgs::Empty);
         void cbPosition(std_msgs::Float32);
-        void cbDurationUp(std_msgs::Int16);
-        void cbDurationDown(std_msgs::Int16);
-        void cbMotor1Ticks(std_msgs::Int32);
-        void cbMotor2Ticks(std_msgs::Int32);
+        void cbDurationUp(std_msgs::Float32);
+        void cbDurationDown(std_msgs::Float32);
+        void cbMotor1Ticks(std_msgs::Int16);
+        void cbMotor2Ticks(std_msgs::Int16);
         void cbJoy(sensor_msgs::Joy);
         void publishJoinStates();
 
